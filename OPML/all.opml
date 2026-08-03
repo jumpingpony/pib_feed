@@ -65,7 +65,7 @@
         <outline type="rss" text="Delhi Edition - Indian Express" title="Delhi Edition - Indian Express" xmlUrl="https://nappingcats.github.io/pib_feed/indianexpress-delhi/feed.xml" htmlUrl="https://epaper.indianexpress.com/t/226/latest"/>
       </outline>
       <outline text="India Today (unofficial, full-text)" title="India Today (unofficial, full-text)">
-        <outline type="rss" text="Magazine - India Today" title="Magazine - India Today" xmlUrl="https://nappingcats.github.io/pib_feed/indiatoday-magazine/feed.xml" htmlUrl="https://www.indiatoday.in/magazine"/>
+        <outline type="rss" text="Magazine - India Today" title="Magazine - India Today" xmlUrl="https://nappingcats.github.io/pib_feed/indiatoday_magazine/feed.xml" htmlUrl="https://www.indiatoday.in/magazine"/>
       </outline>
       <outline text="NITI Aayog (unofficial, PDF)" title="NITI Aayog (unofficial, PDF)">
         <outline type="rss" text="Division Reports - NITI Aayog" title="Division Reports - NITI Aayog" xmlUrl="https://nappingcats.github.io/pib_feed/niti-reports/feed.xml" htmlUrl="https://www.niti.gov.in/publications/division-reports"/>

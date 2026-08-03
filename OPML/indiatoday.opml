@@ -5,7 +5,7 @@
   </head>
   <body>
       <outline text="India Today (unofficial, full-text)" title="India Today (unofficial, full-text)">
-        <outline type="rss" text="Magazine - India Today" title="Magazine - India Today" xmlUrl="https://nappingcats.github.io/pib_feed/indiatoday-magazine/feed.xml" htmlUrl="https://www.indiatoday.in/magazine"/>
+        <outline type="rss" text="Magazine - India Today" title="Magazine - India Today" xmlUrl="https://nappingcats.github.io/pib_feed/indiatoday_magazine/feed.xml" htmlUrl="https://www.indiatoday.in/magazine"/>
       </outline>
   </body>
 </opml>

@@ -28,7 +28,7 @@ issue as `/magazine/DD-MM-YYYY`; each such page links that issue's stories
 (`/magazine/<section>/story/<slug>`). IT_MIN_DATE bounds how far back to go.
 
 Steady state is polite: only stories not already in the published feed are
-fetched (~one issue's worth per week). Output: public/indiatoday-magazine/
+fetched (~one issue's worth per week). Output: public/indiatoday_magazine/
 feed.xml + index.html, merged with the previously published copy
 (IT_PUBLISHED_BASE_URL) so the feed grows past the archive window and survives a
 transient failure.
@@ -65,8 +65,27 @@ MIN_DATE = os.environ.get("IT_MIN_DATE", _default_min).strip()
 # Fetch at most this many new stories per run (one weekly issue is ~40).
 MAX_FETCH = int(os.environ.get("IT_MAX_FETCH", "80"))
 MAX_ITEMS = int(os.environ.get("IT_MAX_ITEMS", "400"))
+# Drop advertorial / lifestyle sections so the feed stays on politics, economy,
+# defence and national affairs. The section is the first path segment of a story
+# URL (/magazine/<section>/story/...), so this needs no content heuristics.
+# Blocklist (not allow-list): any new IT section defaults to kept. Override with
+# IT_DROP_SECTIONS (comma-separated); set it empty to disable filtering.
+_DROP_DEFAULT = (
+    "supplement,leisure,auto-special,travel-plus,smart-money,"
+    "india-today-consent-survey,health,science,movies,sports,entertainment,trends"
+)
+DROP_SECTIONS = {
+    s.strip() for s in os.environ.get("IT_DROP_SECTIONS", _DROP_DEFAULT).split(",") if s.strip()
+}
+SECTION_RE = re.compile(r"/magazine/([a-z0-9-]+)/story/")
 
-KEY = "indiatoday-magazine"
+
+def dropped(url: str) -> bool:
+    m = SECTION_RE.search(url or "")
+    return bool(m) and m.group(1) in DROP_SECTIONS
+
+
+KEY = "indiatoday_magazine"
 FEED = {
     "title": "Magazine - India Today",
     "desc": "Unofficial full-text feed of the India Today weekly magazine.",
@@ -325,7 +344,7 @@ def load_published(session: requests.Session) -> dict[str, tuple[dt.datetime, st
     for m in ITEM_RE.finditer(body):
         block = m.group(0).strip()
         link = _block_link(block)
-        if link:
+        if link and not dropped(link):
             items[link] = (_block_date(block), block)
     print(f"  loaded {len(items)} published items")
     return items
@@ -413,9 +432,9 @@ def main() -> int:
     urls: list[str] = []
     for day, url in issues:
         for s in issue_stories(session, url):
-            if s not in urls:
+            if s not in urls and not dropped(s):
                 urls.append(s)
-    print(f"  {len(urls)} unique stories")
+    print(f"  {len(urls)} unique stories (dropping sections: {', '.join(sorted(DROP_SECTIONS)) or 'none'})")
 
     new = full = 0
     for url in urls:

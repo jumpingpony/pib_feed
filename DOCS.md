@@ -542,7 +542,7 @@ signed URL is minted only for issues not already carried in the published feed.
 
 | Feed | Content | Link |
 | --- | --- | --- |
-| Magazine - India Today | full-text weekly magazine articles | [feed.xml](https://nappingcats.github.io/pib_feed/indiatoday-magazine/feed.xml) |
+| Magazine - India Today | full-text weekly magazine articles | [feed.xml](https://nappingcats.github.io/pib_feed/indiatoday_magazine/feed.xml) |
 
 ## How it works
 
