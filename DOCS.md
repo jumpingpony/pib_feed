@@ -654,6 +654,8 @@ Full-text RSS feeds for [The Economist](https://www.economist.com), built by
 
 | Feed | What | GitHub Pages |
 |------|------|------|
+| Business | the weekly Business section articles | [feed.xml](https://nappingcats.github.io/pib_feed/economist-business/feed.xml) |
+| By Invitation | guest commentary from outside contributors | [feed.xml](https://nappingcats.github.io/pib_feed/economist-by-invitation/feed.xml) |
 | Finance & economics | the weekly Finance & economics articles | [feed.xml](https://nappingcats.github.io/pib_feed/economist-finance-and-economics/feed.xml) |
 | Schools brief | the explainer essays / primers | [feed.xml](https://nappingcats.github.io/pib_feed/economist-schools-brief/feed.xml) |
 | Economic & financial indicators | the weekly economic-data & chart pages | [feed.xml](https://nappingcats.github.io/pib_feed/economist-indicators/feed.xml) |

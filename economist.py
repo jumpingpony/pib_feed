@@ -91,6 +91,22 @@ FEEDS = {
         "max_items": 120,
         "archive_images": True,
     },
+    "economist-by-invitation": {
+        "title": "By Invitation - Economist",
+        "desc": "Unofficial full-text feed of The Economist's By Invitation guest commentary.",
+        "page": f"{BASE}/topics/by-invitation",
+        "html": f"{BASE}/topics/by-invitation",
+        "max_items": 120,
+        "archive_images": True,
+    },
+    "economist-business": {
+        "title": "Business - Economist",
+        "desc": "Unofficial full-text feed of The Economist's Business section.",
+        "page": f"{BASE}/topics/business",
+        "html": f"{BASE}/topics/business",
+        "max_items": 120,
+        "archive_images": True,
+    },
 }
 
 
