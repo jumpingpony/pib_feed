@@ -587,6 +587,63 @@ issue per week.
 
 ---
 
+# Frontline feeds (unofficial)
+
+`frontline.py` builds two **full-text** feeds of *Frontline*, The Hindu group's
+national fortnightly (`frontline.thehindu.com`) — one RSS item per article. The
+two feeds are disjoint by path, so nothing is duplicated between them:
+
+| Feed | Content | Link |
+| --- | --- | --- |
+| Magazine - Frontline | the fortnightly print issue's articles | [feed.xml](https://nappingcats.github.io/pib_feed/frontline_magazine/feed.xml) |
+| Digital Exclusives - Frontline | web-only pieces under `/blog/` | [feed.xml](https://nappingcats.github.io/pib_feed/frontline_blog/feed.xml) |
+
+**Why two feeds.** *Frontline*'s digital exclusives are the same editorial team's
+long-form journalism, just published between issues rather than in the print
+magazine — not junk or news-wire filler. Rather than tag them, they get their own
+feed (`/blog/`), leaving the Magazine feed as the pure print table of contents.
+Unlike India Today, the magazine feed has **no advertorial supplements to drop** —
+it is already the issue's curated ToC, so nothing is filtered by default.
+
+## How it works
+
+*Frontline*'s paywall is **Piano.io**, a purely client-side gate — the
+Bypass-Paywalls rule for `thehindu.com` just blocks `piano.io` / `cxense` /
+`amp-subscriptions` JS. A server-side fetch never runs that JS, and the complete
+article ships in the HTML regardless, inside
+`<div id="content-body-<ID>" class="articlebodycontent" itemprop="articleBody">`.
+So there is no bypass to perform — a plain GET gets the full body.
+
+Discovery uses *Frontline*'s **official RSS feeders** (which are themselves
+headline-only, hence this project): the magazine feed unions
+`/current-issue/feeder/default.rss` + `/magazine/feeder/default.rss`; the blog
+feed uses `/blog/feeder/default.rss`. Each hands over item URLs, categories, and
+IST pubDates. Title / lead image / summary come from the article's `og:` tags,
+the byline from the `person-name` author links, and the body is reconstructed
+from the container's `<p>`/`<h2-4>`/`<blockquote>`/`<img>` blocks (images are
+lazy-loaded on the `fl-i.thgim.com` CDN via `data-original`, and hotlink fine, so
+nothing is archived). An inline comment-loader `<script>` inside the body div is
+stripped first so its template-literal markup does not leak into the text. Only
+articles not already in the published feed are fetched, so steady state is light.
+
+## Configuration (env vars)
+
+| Var | Default | Meaning |
+| --- | --- | --- |
+| `FL_PUBLISHED_BASE_URL` | – | Live-site base for history-merge |
+| `FL_ONLY` | – | Build only these keys (comma-separated), e.g. `frontline_blog` |
+| `FL_MAG_DROP_SECTIONS` | – | First-path sections to drop from the magazine feed (e.g. `photo-essay`); blog is never filtered |
+| `FL_MAX_FETCH` | `120` | Cap on new articles fetched per feed per run |
+| `FL_MAX_ITEMS` | `400` | Max items retained per feed |
+
+## Caveats
+
+- Depends on the `articlebodycontent` container and `og:` tags; if *Frontline*
+  changes its markup or hard-walls the body server-side, the feed breaks.
+- Unofficial and unaffiliated; content © *Frontline* / THG Publishing Pvt Ltd.
+
+---
+
 # NITI Aayog publication feeds (unofficial)
 
 `niti.py` builds **PDF feeds** of NITI Aayog's publications (`niti.gov.in`). NITI
@@ -899,4 +956,4 @@ Ready-to-import OPML bundles live in `OPML/`: `pib.opml`, `newsonair.opml`,
 `current-affairs.opml`, `mygov.opml`, `scobserver.opml`, `prsindia.opml`,
 `idsa.opml`, `eacpm.opml`, `economist.opml`, `projectsyndicate.opml`,
 `indianexpress.opml` (includes UPSC Essentials), `indiatoday.opml`, `niti.opml`,
-`ipcs.opml`, `indiasworld.opml`, and `all.opml` (every feed, grouped).
+`ipcs.opml`, `indiasworld.opml`, `frontline.opml`, and `all.opml` (every feed, grouped).

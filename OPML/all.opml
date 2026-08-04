@@ -80,5 +80,9 @@
       <outline text="India's World" title="India's World">
         <outline type="rss" text="India's World — Explainers" title="India's World — Explainers" xmlUrl="https://nappingcats.github.io/pib_feed/indiasworld/feed.xml" htmlUrl="https://indiasworld.in"/>
       </outline>
+      <outline text="Frontline (unofficial, full-text)" title="Frontline (unofficial, full-text)">
+        <outline type="rss" text="Magazine - Frontline" title="Magazine - Frontline" xmlUrl="https://nappingcats.github.io/pib_feed/frontline_magazine/feed.xml" htmlUrl="https://frontline.thehindu.com/current-issue/"/>
+        <outline type="rss" text="Digital Exclusives - Frontline" title="Digital Exclusives - Frontline" xmlUrl="https://nappingcats.github.io/pib_feed/frontline_blog/feed.xml" htmlUrl="https://frontline.thehindu.com/blog/"/>
+      </outline>
   </body>
 </opml>

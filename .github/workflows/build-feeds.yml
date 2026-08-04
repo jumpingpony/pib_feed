@@ -24,6 +24,7 @@ on:
       - indiatoday.py
       - niti.py
       - indiasworld.py
+      - frontline.py
       - archive_pdfs.py
       - .github/workflows/build-feeds.yml
 
@@ -201,6 +202,13 @@ jobs:
           INDIASWORLD_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
         run: python indiasworld.py
 
+      - name: Build Frontline magazine and Digital Exclusives feeds
+        id: frontline
+        continue-on-error: true
+        env:
+          FL_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+        run: python frontline.py
+
       - name: Mirror PDFs to the archive release
         id: archive_pdfs
         continue-on-error: true
@@ -247,6 +255,7 @@ jobs:
             [NITI]="${{ steps.niti.outcome }}"
             [IPCS]="${{ steps.ipcs.outcome }}"
             [IndiasWorld]="${{ steps.indiasworld.outcome }}"
+            [Frontline]="${{ steps.frontline.outcome }}"
             [ArchivePDFs]="${{ steps.archive_pdfs.outcome }}"
             [ArchiveImages]="${{ steps.archive_images.outcome }}"
           )
