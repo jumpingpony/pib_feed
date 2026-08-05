@@ -25,13 +25,15 @@ is reconstructed from its block elements (p / h2-4 / img), like indianexpress.py
 
 Issues are discovered from the year archive `/magazine/<year>`, which lists every
 issue as `/magazine/DD-MM-YYYY`; each such page links that issue's stories
-(`/magazine/<section>/story/<slug>`). IT_MIN_DATE bounds how far back to go.
+(`/magazine/<section>/story/<slug>`). IT_MIN_DATE bounds how far back to go. Once
+a published feed exists, only newer issues and the newest known issue are opened;
+the latter is rescanned so stories added late are still found.
 
-Steady state is polite: only stories not already in the published feed are
-fetched (~one issue's worth per week). Output: public/indiatoday_magazine/
-feed.xml + index.html, merged with the previously published copy
-(IT_PUBLISHED_BASE_URL) so the feed grows past the archive window and survives a
-transient failure.
+Steady state is polite: older issue pages and stories already in the published
+feed are not fetched. Best Colleges survey packages are treated as advertorials
+and dropped during discovery. Output: public/indiatoday_magazine/feed.xml +
+index.html, merged with the previously published copy (IT_PUBLISHED_BASE_URL) so
+the feed grows past the archive window and survives a transient failure.
 """
 from __future__ import annotations
 
@@ -50,7 +52,7 @@ BASE = "https://www.indiatoday.in"
 UA = os.environ.get(
     "IT_UA",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+    "(KHTML, like Gecko) Chrome/151.0.7922.76 Safari/537.36",
 )
 IST = dt.timezone(dt.timedelta(hours=5, minutes=30))
 
@@ -78,9 +80,16 @@ DROP_SECTIONS = {
     s.strip() for s in os.environ.get("IT_DROP_SECTIONS", _DROP_DEFAULT).split(",") if s.strip()
 }
 SECTION_RE = re.compile(r"/magazine/([a-z0-9-]+)/story/")
+BEST_COLLEGES_RE = re.compile(
+    r"/magazine/(?:best-colleges-of-india-\d{4}/story/|"
+    r"cover-story/story/[^/?#]*best-colleges-survey)",
+    re.I,
+)
 
 
 def dropped(url: str) -> bool:
+    if BEST_COLLEGES_RE.search(url or ""):
+        return True
     m = SECTION_RE.search(url or "")
     return bool(m) and m.group(1) in DROP_SECTIONS
 
@@ -317,6 +326,7 @@ def issue_stories(session: requests.Session, issue_url: str) -> list[str]:
 ITEM_RE = re.compile(r"<item>.*?</item>", re.S)
 FEEDLINK_RE = re.compile(r"<link>([^<]+)</link>")
 PUBDATE_RE = re.compile(r"<pubDate>([^<]+)</pubDate>")
+CATEGORY_RE = re.compile(r"<category>([^<]+)</category>")
 
 
 def _block_link(block: str) -> str | None:
@@ -332,6 +342,23 @@ def _block_date(block: str) -> dt.datetime:
         except (TypeError, ValueError):
             pass
     return dt.datetime(1970, 1, 1, tzinfo=dt.timezone.utc)
+
+
+def _block_issue_date(block: str) -> dt.date | None:
+    m = CATEGORY_RE.search(block)
+    if not m:
+        return None
+    try:
+        return dt.date.fromisoformat(html.unescape(m.group(1)).strip()[:10])
+    except ValueError:
+        return None
+
+
+def latest_published_issue(
+    items: dict[str, tuple[dt.datetime, str]],
+) -> dt.date | None:
+    dates = [day for _, block in items.values() if (day := _block_issue_date(block))]
+    return max(dates, default=None)
 
 
 def load_published(session: requests.Session) -> dict[str, tuple[dt.datetime, str]]:
@@ -426,15 +453,29 @@ def main() -> int:
         return 2
     print(f"[{KEY}] min_date={min_date}")
     merged = load_published(session)
+    latest_issue = latest_published_issue(merged)
 
     issues = discover_issues(session, min_date)
-    print(f"  {len(issues)} issues in range")
+    scan_issues = [
+        (day, url) for day, url in issues if latest_issue is None or day >= latest_issue
+    ]
+    latest_label = latest_issue.isoformat() if latest_issue else "none"
+    print(
+        f"  {len(issues)} issues in range; scanning {len(scan_issues)} "
+        f"(newest published issue: {latest_label})"
+    )
     urls: list[str] = []
-    for day, url in issues:
+    dropped_count = 0
+    for day, url in scan_issues:
         for s in issue_stories(session, url):
-            if s not in urls and not dropped(s):
+            if dropped(s):
+                dropped_count += 1
+            elif s not in urls:
                 urls.append(s)
-    print(f"  {len(urls)} unique stories (dropping sections: {', '.join(sorted(DROP_SECTIONS)) or 'none'})")
+    print(
+        f"  {len(urls)} unique stories; dropped {dropped_count} advertorial/section links "
+        f"(sections: {', '.join(sorted(DROP_SECTIONS)) or 'none'})"
+    )
 
     new = full = 0
     for url in urls:

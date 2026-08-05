@@ -564,9 +564,12 @@ Next.js state blob `<script id="__NEXT_DATA__">`, at
   so nothing is archived.
 
 Issues are discovered from the year archive `/magazine/<year>`, which lists every
-issue as `/magazine/DD-MM-YYYY`; each such page links that issue's stories. Only
-stories not already in the published feed are fetched, so steady state is ~one
-issue per week.
+issue as `/magazine/DD-MM-YYYY`; each such page links that issue's stories. After
+loading the published feed, the builder opens only newer issues and the newest
+known issue (to catch late additions), rather than rescanning every issue in the
+archive window. Only stories not already in the published feed are fetched.
+Best Colleges survey packages are treated as advertorials and excluded by their
+stable section/slug patterns.
 
 ## Configuration (env vars)
 
