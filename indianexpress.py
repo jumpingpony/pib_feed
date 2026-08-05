@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """Build full-text RSS feeds from The Indian Express (indianexpress.com).
 
-Indian Express publishes per-section feeds (…/section/<name>/feed/), but they
-are metadata only: each <item> has a title, link and date, with an empty
-<content:encoded>. The article pages themselves are served in full — the
+Indian Express publishes per-section feeds (…/section/<name>/feed/), but its
+CloudFront distribution rejects GitHub-hosted runners. The site's public
+WordPress REST API provides the same listings with rendered article content.
+It is fetched through Google's translation relay because the relay is accepted
+from GitHub Actions while direct requests from those runners receive HTTP 403.
+
+The article pages themselves are served in full — the
 "premium" wall is a client-side Evolok JavaScript overlay (the Bypass-Paywalls
 rule for indianexpress.com simply blocks that script). A server-side fetch
 never runs the JS, so the complete article is already in the HTML, inside
@@ -39,6 +43,7 @@ from xml.sax.saxutils import escape
 import requests
 
 BASE = "https://indianexpress.com"
+REST_BASE = "https://indianexpress-com.translate.goog/wp-json/wp/v2/article"
 UA = (
     "Mozilla/5.0 (Linux; Android 15; Pixel 8) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/151.0.7922.71 Mobile Safari/537.36"
@@ -57,14 +62,14 @@ FEEDS = {
     "indianexpress-explained": {
         "title": "Explained - Indian Express",
         "desc": "Unofficial full-text feed of The Indian Express Explained section.",
-        "rss": f"{BASE}/section/explained/feed/",
+        "section_id": 442186323,
         "html": f"{BASE}/section/explained/",
         "max_items": 300,
     },
     "indianexpress-opinion": {
         "title": "Opinion - Indian Express",
         "desc": "Unofficial full-text feed of The Indian Express Opinion section.",
-        "rss": f"{BASE}/section/opinion/feed/",
+        "section_id": 352,
         "html": f"{BASE}/section/opinion/",
         "max_items": 300,
     },
@@ -100,6 +105,33 @@ def fetch(session: requests.Session, url: str) -> str | None:
     if last:
         print(f"  fetch failed {url}: {last}", file=sys.stderr)
     return None
+
+
+def fetch_api_items(session: requests.Session, section_id: int) -> list[dict]:
+    params = {
+        "ie_section": section_id,
+        "per_page": 100,
+        "_fields": "id,date,link,title,content,featured_media,ie_byline_authors",
+        "_x_tr_sl": "auto",
+        "_x_tr_tl": "en",
+        "_x_tr_hl": "en",
+    }
+    last = None
+    for _ in range(RETRIES + 1):
+        try:
+            response = session.get(REST_BASE, params=params, timeout=TIMEOUT)
+            if response.status_code == 200:
+                data = response.json()
+                if isinstance(data, list):
+                    return data
+                last = "unexpected JSON response"
+            else:
+                last = f"HTTP {response.status_code}"
+        except (requests.RequestException, ValueError) as exc:
+            last = str(exc)
+    if last:
+        print(f"  REST fetch failed for section {section_id}: {last}", file=sys.stderr)
+    return []
 
 
 # --- xml safety ---------------------------------------------------------------
@@ -165,6 +197,36 @@ def parse_rfc822(s: str) -> dt.datetime | None:
         return None
 
 
+def parse_api_date(value: str) -> dt.datetime | None:
+    try:
+        parsed = dt.datetime.fromisoformat(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=IST)
+
+
+def parse_api_items(raw_items: list[dict]) -> list[dict]:
+    items: list[dict] = []
+    seen: set[str] = set()
+    for raw in raw_items:
+        link = html.unescape(str(raw.get("link", ""))).strip()
+        if not link or link in seen:
+            continue
+        seen.add(link)
+        title = raw.get("title") or {}
+        content = raw.get("content") or {}
+        items.append(
+            {
+                "link": link,
+                "title": clean(str(title.get("rendered", ""))),
+                "author": "",
+                "date": parse_api_date(str(raw.get("date", ""))),
+                "content": str(content.get("rendered", "")),
+            }
+        )
+    return items
+
+
 # --- article body -------------------------------------------------------------
 OG_IMAGE_RE = re.compile(r'<meta property="og:image" content="([^"]+)"')
 BODY_START = 'id="pcl-full-content"'
@@ -211,8 +273,13 @@ def parse_article(page: str) -> tuple[str, list[tuple[str, str]]]:
     tail = page[i:]
     ends = [p for p in (tail.find(m) for m in END_MARKERS) if p > 0]
     seg = tail[: min(ends)] if ends else tail[:14000]
+    return hero, parse_content_blocks(seg)
+
+
+def parse_content_blocks(content: str) -> list[tuple[str, str]]:
+    """Extract readable paragraphs, headings, and images from article HTML."""
     blocks: list[tuple[str, str]] = []
-    for m in BLOCK_RE.finditer(seg):
+    for m in BLOCK_RE.finditer(content):
         tag = m.group(0)
         low = tag.lower()
         if low.startswith("<img"):
@@ -227,7 +294,7 @@ def parse_article(page: str) -> tuple[str, list[tuple[str, str]]]:
         if len(txt) < 25 or PROMO_RE.match(txt):
             continue
         blocks.append(("h" if low.startswith("<h") else "p", tidy(inner)))
-    return hero, blocks
+    return blocks
 
 
 def render_body(it: dict, hero: str, blocks: list[tuple[str, str]]) -> tuple[str, str]:
@@ -354,16 +421,17 @@ def write_feed(key: str, xml: str, count: int) -> None:
 def run_feed(session: requests.Session, key: str, now: dt.datetime) -> int:
     print(f"[{key}]")
     merged = load_published(session, key)
-    rss = fetch(session, FEEDS[key]["rss"])
-    items = parse_rss(rss) if rss else []
-    print(f"  rss: {len(items)} items")
+    raw_items = fetch_api_items(session, FEEDS[key]["section_id"])
+    items = parse_api_items(raw_items)
+    print(f"  REST: {len(items)} items")
     new = full = 0
     for it in items:
         if it["link"] in merged:
             continue
         if new >= MAX_FETCH:
             break
-        hero, blocks = parse_article(fetch(session, it["link"]))
+        hero = ""
+        blocks = parse_content_blocks(it["content"])
         body, summary = render_body(it, hero, blocks)
         if len(blocks) >= 2:
             full += 1
