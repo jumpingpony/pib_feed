@@ -37,7 +37,7 @@ AJAX = BASE + "/wp-admin/admin-ajax.php"
 
 UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+    "(KHTML, like Gecko) Chrome/151.0.7922.76 Safari/537.36"
 )
 IST = dt.timezone(dt.timedelta(hours=5, minutes=30))
 
@@ -124,6 +124,11 @@ BULLETIN_LI_RE = re.compile(
     r'<p[^>]*class="text-center[^"]*"[^>]*>(?P<date>[^<]+)</p>',
     re.S | re.I,
 )
+BULLETIN_NONCE_RE = re.compile(
+    r"action:\s*['\"]filter_bulletins_details['\"].{0,500}?"
+    r"security:\s*['\"]([^'\"]+)",
+    re.S | re.I,
+)
 POSTID_RE = re.compile(r"postid-(\d+)")
 ENTRY_RE = re.compile(r'<div[^>]*class="[^"]*\bentry-content\b[^"]*"[^>]*>', re.I)
 # The transcript sits in `.entry-content`; the theme closes it with an explicit
@@ -143,16 +148,33 @@ TAG_RE = re.compile(r"<[^>]+>")
 
 def enumerate_bulletins(session: requests.Session, slug: str) -> list[tuple[str, str]]:
     """Return (url, list-date) tuples for a bulletin category, newest first."""
+    category_url = f"{BASE}/bulletins-detail-category/{slug}/"
+    category_page = fetch(session, category_url)
+    if not category_page:
+        return []
+    nonce_match = BULLETIN_NONCE_RE.search(category_page)
+    if not nonce_match:
+        print(f"  no bulletin security nonce found for {slug}", file=sys.stderr)
+        return []
+    nonce = nonce_match.group(1)
+
     seen: dict[str, str] = {}
     for page in range(1, BULLETIN_PAGES + 1):
         body = fetch(
             session,
             AJAX,
             method="post",
-            data={"action": "filter_bulletins_details", "category": slug, "page": str(page)},
+            data={
+                "action": "filter_bulletins_details",
+                "security": nonce,
+                "category": slug,
+                "date_from": "",
+                "date_to": "",
+                "paged": str(page),
+            },
             headers={
                 "X-Requested-With": "XMLHttpRequest",
-                "Referer": f"{BASE}/bulletins-detail-category/{slug}/",
+                "Referer": category_url,
                 "Origin": BASE,
             },
         )
