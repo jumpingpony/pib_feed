@@ -41,8 +41,7 @@ import requests
 BASE = "https://indianexpress.com"
 UA = os.environ.get(
     "IE_UA",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
 )
 IST = dt.timezone(dt.timedelta(hours=5, minutes=30))
 
