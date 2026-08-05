@@ -18,8 +18,12 @@ those REST endpoints (no HTML scraping):
 
 Only items from the last N years (default 2) are included — a rolling window
 applied to both freshly-fetched items and the previously-published feed, so old
-matter ages out cleanly. Because the REST API serves items newest-first, each
-feed stops paginating as soon as it crosses the cutoff.
+matter ages out cleanly. Because the REST API serves items newest-first, a
+steady-state run stops at the first page whose entries are all already in the
+published feed. A cold start without published history falls back to walking
+the full rolling window. Cases are ordered and dated by their modified timestamp
+because the rendered `/cases/` page resurfaces active matters that were first
+published years ago; Journal and Reports use their publication timestamps.
 
 Output: public/<key>/feed.xml + public/<key>/index.html. Each feed merges its
 previously-published copy so a transient REST hiccup never drops history.
@@ -28,7 +32,6 @@ from __future__ import annotations
 
 import datetime as dt
 import html
-import json
 import os
 import re
 import sys
@@ -42,7 +45,7 @@ API = BASE + "/wp-json/wp/v2"
 
 UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+    "(KHTML, like Gecko) Chrome/151.0.7922.76 Safari/537.36"
 )
 IST = dt.timezone(dt.timedelta(hours=5, minutes=30))
 UTC = dt.timezone.utc
@@ -64,12 +67,13 @@ PUBLISHED_BASE_URL = os.environ.get("SCO_PUBLISHED_BASE_URL", "").strip().rstrip
 # to the Yoast summary.
 FEEDS = [
     {
-        "key": "scobserver-cases",
+        "key": "scobserver_cases",
         "rest_base": "cases",
         "title": "Cases - Supreme Court Observer",
         "desc": "Unofficial feed of cases tracked by Supreme Court Observer.",
         "full": False,
         "max_items": 500,
+        "date_field": "modified",
     },
     {
         "key": "scobserver-journal",
@@ -136,21 +140,25 @@ def strip_tags(s: str) -> str:
     return html.unescape(TAG_RE.sub(" ", s)).replace("\xa0", " ").strip()
 
 
-def _parse_rest_date(item: dict) -> dt.datetime | None:
-    # date_gmt is naive UTC; prefer it, fall back to site-local `date` (IST).
-    g = item.get("date_gmt")
+def _parse_rest_timestamp(item: dict, field: str) -> dt.datetime | None:
+    # WordPress GMT fields are naive UTC; fallback fields use site-local IST.
+    g = item.get(f"{field}_gmt")
     if g:
         try:
             return dt.datetime.fromisoformat(g).replace(tzinfo=UTC)
         except ValueError:
             pass
-    d = item.get("date")
+    d = item.get(field)
     if d:
         try:
             return dt.datetime.fromisoformat(d).replace(tzinfo=IST)
         except ValueError:
             pass
     return None
+
+
+def _item_date(feed: dict, item: dict) -> dt.datetime | None:
+    return _parse_rest_timestamp(item, feed.get("date_field", "date"))
 
 
 def _terms(item: dict) -> list[str]:
@@ -161,7 +169,7 @@ def _terms(item: dict) -> list[str]:
 def rest_to_item(feed: dict, raw: dict) -> dict | None:
     link = (raw.get("link") or "").strip()
     title = strip_tags(raw.get("title", {}).get("rendered", ""))
-    date = _parse_rest_date(raw)
+    date = _item_date(feed, raw)
     if not link or not title or not date:
         return None
 
@@ -184,14 +192,20 @@ def rest_to_item(feed: dict, raw: dict) -> dict | None:
     return {"link": link, "title": title, "date": date, "body_html": body, "terms": terms}
 
 
-def collect(session: requests.Session, feed: dict, cutoff: dt.datetime) -> list[dict]:
-    """Page through the REST type newest-first, stopping once past the cutoff."""
+def collect(
+    session: requests.Session,
+    feed: dict,
+    cutoff: dt.datetime,
+    known_dates: dict[str, dt.datetime],
+) -> list[dict]:
+    """Collect new or changed REST items, stopping at an unchanged page."""
     out: list[dict] = []
     page = 1
+    pages_checked = 0
     while True:
         url = (
             f"{API}/{feed['rest_base']}?per_page={PER_PAGE}&page={page}"
-            "&orderby=date&order=desc&_embed=wp:term"
+            f"&orderby={feed.get('date_field', 'date')}&order=desc&_embed=wp:term"
         )
         r = fetch(session, url)
         if r is None:
@@ -202,20 +216,41 @@ def collect(session: requests.Session, feed: dict, cutoff: dt.datetime) -> list[
             break
         if not isinstance(batch, list) or not batch:
             break
-        stop = False
+        pages_checked += 1
+        reached_cutoff = False
+        changed_on_page = 0
         for raw in batch:
+            link = (raw.get("link") or "").strip()
+            date = _item_date(feed, raw)
+            if date is not None and date < cutoff:
+                reached_cutoff = True
+                continue
+            key = link.rstrip("/")
+            known_date = known_dates.get(key)
+            if (
+                not link
+                or date is None
+                or (known_date is not None and date <= known_date)
+            ):
+                continue
+            changed_on_page += 1
             item = rest_to_item(feed, raw)
             if not item:
                 continue
-            if item["date"] < cutoff:
-                stop = True
-                continue
             out.append(item)
+            known_dates[key] = item["date"]
         total_pages = int(r.headers.get("X-WP-TotalPages", "0") or 0)
-        if stop or (total_pages and page >= total_pages):
+        if (
+            reached_cutoff
+            or changed_on_page == 0
+            or (total_pages and page >= total_pages)
+        ):
             break
         page += 1
-    print(f"  {feed['key']}: fetched {len(out)} within window")
+    print(
+        f"  {feed['key']}: checked {pages_checked} REST page(s), "
+        f"found {len(out)} new or updated"
+    )
     return out
 
 
@@ -331,8 +366,9 @@ def write_feed(feed: dict, xml: str, count: int) -> None:
 # --- main ---------------------------------------------------------------------
 def run_feed(session: requests.Session, feed: dict, cutoff: dt.datetime) -> int:
     print(f"[{feed['key']}]")
-    fresh = collect(session, feed, cutoff)
     merged = load_published(session, feed, cutoff)
+    known_dates = {link.rstrip("/"): date for link, (date, _) in merged.items()}
+    fresh = collect(session, feed, cutoff, known_dates)
     for art in fresh:
         merged[art["link"]] = (art["date"], render_item(art).strip())
     xml, kept = build_feed(feed, merged)

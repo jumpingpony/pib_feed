@@ -280,7 +280,7 @@ window).
 
 | Feed | What | GitHub Pages |
 |------|------|------|
-| Cases | matters tracked on the SCO case docket | [feed.xml](https://nappingcats.github.io/pib_feed/scobserver-cases/feed.xml) |
+| Cases | matters tracked on the SCO case docket | [feed.xml](https://nappingcats.github.io/pib_feed/scobserver_cases/feed.xml) |
 | Journal | analysis / opinion articles | [feed.xml](https://nappingcats.github.io/pib_feed/scobserver-journal/feed.xml) |
 | Reports | per-day argument & hearing summaries (full text) | [feed.xml](https://nappingcats.github.io/pib_feed/scobserver-reports/feed.xml) |
 
@@ -296,18 +296,21 @@ Every content type is exposed cleanly through the **WordPress REST API**
 (`/wp-json/wp/v2/<type>`) — title, permalink, published + modified timestamps, a
 ready-made summary (Yoast description) and embedded taxonomy terms, with the
 long-form type (`reports`) also returning full rendered bodies. No HTML
-scraping. `scobserver.py` pages each type newest-first, stopping as soon as it
-crosses the 2-year cutoff, uses the full body when present (else the summary),
-and carries taxonomy terms as `<category>`. XML-illegal characters in the
-long-form legal bodies are stripped so every feed stays well-formed. Each feed
-merges its previously-published copy (the same rolling window applied) so a
-transient REST hiccup never drops history.
+scraping. `scobserver.py` loads the published feed first and pages each type
+newest-first, stopping at the first unchanged page or the 2-year cutoff. Cases
+use their modified timestamp because the rendered `/cases/` page resurfaces
+active matters originally published years earlier; Journal and Reports use
+their publication timestamps. The script uses the full body when present (else
+the summary) and carries taxonomy terms as `<category>`. XML-illegal characters
+in the long-form legal bodies are stripped so every feed stays well-formed.
+Each feed merges its previously-published copy (the same rolling window
+applied) so a transient REST hiccup never drops history.
 
 ## Configuration (env vars)
 
 | Var | Default | Meaning |
 |-----|---------|---------|
-| `SCO_WINDOW_YEARS` | `2` | Rolling inclusion window, in years |
+| `SCO_WINDOW_YEARS` | `2` | Rolling inclusion window: modified date for Cases, published date otherwise |
 | `SCO_PER_PAGE` | `100` | REST page size |
 | `SCO_PUBLISHED_BASE_URL` | – | Live-site base for history-merge |
 | `SCO_OUT_DIR` | `public` | Output directory |
