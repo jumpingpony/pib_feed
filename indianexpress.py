@@ -39,11 +39,11 @@ from xml.sax.saxutils import escape
 import requests
 
 BASE = "https://indianexpress.com"
-UA = os.environ.get(
-    "IE_UA",
+UA = (
     "Mozilla/5.0 (Linux; Android 15; Pixel 8) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/151.0.7922.71 Mobile Safari/537.36",
+    "(KHTML, like Gecko) Chrome/151.0.7922.71 Mobile Safari/537.36"
 )
+UA = os.environ.get("IE_UA", UA)
 IST = dt.timezone(dt.timedelta(hours=5, minutes=30))
 
 # --- global tunables ----------------------------------------------------------
