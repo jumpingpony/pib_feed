@@ -8,7 +8,7 @@ on:
 
 jobs:
   probe:
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     steps:
       - name: Probe official endpoints
         shell: bash
@@ -21,6 +21,8 @@ jobs:
               "explained-rss": "https://indianexpress.com/section/explained/feed/",
               "explained-rest": "https://indianexpress.com/wp-json/wp/v2/article?ie_section=442186323&per_page=1&_fields=id,date,link,title,content",
               "opinion-rest": "https://indianexpress.com/wp-json/wp/v2/article?ie_section=352&per_page=1&_fields=id,date,link,title,content",
+              "explained-rest-translate": "https://indianexpress-com.translate.goog/wp-json/wp/v2/article?ie_section=442186323&per_page=1&_fields=id,date,link,title,content&_x_tr_sl=auto&_x_tr_tl=en&_x_tr_hl=en",
+              "opinion-rest-translate": "https://indianexpress-com.translate.goog/wp-json/wp/v2/article?ie_section=352&per_page=1&_fields=id,date,link,title,content&_x_tr_sl=auto&_x_tr_tl=en&_x_tr_hl=en",
               "current-article": "https://indianexpress.com/article/explained/explained-law/supreme-court-motor-insurance-rules-uninsured-mandatory-vehicles-10819557/",
           }
           headers = {
