@@ -9,11 +9,11 @@ has a paginated listing (`<section>.php?pageno=N`, newest first) whose
 `<li class="clearfix">` rows carry the link, <b>title</b>, author, a
 "09 Jul, 2026" date, the article number and a teaser.
 
-Feeds are reconstructed by walking each listing newest-first (stopping at the
-first page whose items are all already published) and scraping the full body
-from each new article's page: the paragraphs following the date stamp, up to
-the next page section. Items carry the complete text (older items are
-sometimes abstract-only on the site itself).
+Feeds are reconstructed by walking each listing newest-first (stopping once
+article numbers cross the newest published number) and scraping the full body
+from each newer article's page: the paragraphs following the date stamp, up to
+the next page section. Items carry the complete text (older items are sometimes
+abstract-only on the site itself).
 
 NOTE: ipcs.org is unreachable from some networks (it connects fine from GitHub
 runners). When the source cannot be fetched the previously-published feed is
@@ -38,7 +38,7 @@ BASE = "https://www.ipcs.org"
 UA = os.environ.get(
     "IPCS_UA",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+    "(KHTML, like Gecko) Chrome/151.0.7922.76 Safari/537.36",
 )
 IST = dt.timezone(dt.timedelta(hours=5, minutes=30))
 
@@ -312,6 +312,12 @@ def write_feed(feed: dict, xml: str, count: int) -> None:
 def run_feed(session: requests.Session, feed: dict, now: dt.datetime) -> int:
     print(f"[{feed['key']}]")
     merged = load_published(session, feed["key"])
+    published_ids = [
+        int(match.group(1))
+        for link in merged
+        if (match := re.search(r"[?&]articleNo=(\d+)", link))
+    ]
+    newest_published_id = max(published_ids, default=0)
     rank = new = stale = 0
     for page_no in range(1, MAX_PAGES + 1):
         url = f"{BASE}/{feed['page']}" + (f"?pageno={page_no}" if page_no > 1 else "")
@@ -323,7 +329,7 @@ def run_feed(session: requests.Session, feed: dict, now: dt.datetime) -> int:
             break
         page_new = 0
         for it in rows:
-            if it["link"] not in merged and new < MAX_FETCH:
+            if it["id"] > newest_published_id and new < MAX_FETCH:
                 art = fetch(session, it["link"])
                 when, paras, pdf = parse_article(art) if art else (None, [], "")
                 when = when or it["date"] or (now - dt.timedelta(seconds=rank))
@@ -331,9 +337,10 @@ def run_feed(session: requests.Session, feed: dict, now: dt.datetime) -> int:
                 page_new += 1
                 new += 1
             rank += 1
-        # Newest-first: two consecutive fully-known pages -> the rest is history.
+        # Article numbers increase monotonically; the first page without a newer
+        # one has crossed the published boundary.
         stale = stale + 1 if page_new == 0 else 0
-        if stale >= 2:
+        if stale >= 1:
             break
     xml, kept = build_feed(feed, merged)
     write_feed(feed, xml, kept)

@@ -28,7 +28,7 @@ import os
 import re
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from email.utils import format_datetime
+from email.utils import format_datetime, parsedate_to_datetime
 from xml.sax.saxutils import escape
 
 import requests
@@ -38,7 +38,7 @@ DL = BASE + "/current-affairs/downloads"
 
 UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+    "(KHTML, like Gecko) Chrome/151.0.7922.76 Safari/537.36"
 )
 IST = dt.timezone(dt.timedelta(hours=5, minutes=30))
 
@@ -256,19 +256,29 @@ def render_item(art: dict) -> str:
     )
 
 
-YEAR_IN_TITLE_RE = re.compile(r"<title>\[(\d{4})\s*\|")
+PUBDATE_RE = re.compile(r"<pubDate>([^<]+)</pubDate>")
 
 
-def _year_of(block: str) -> int:
-    m = YEAR_IN_TITLE_RE.search(block)
-    return int(m.group(1)) if m else 0
+def _block_date(block: str) -> dt.datetime:
+    match = PUBDATE_RE.search(block)
+    if match:
+        try:
+            return parsedate_to_datetime(match.group(1).strip())
+        except (TypeError, ValueError):
+            pass
+    return dt.datetime(1970, 1, 1, tzinfo=dt.timezone.utc)
 
 
 def build_feed(feed: dict, items_by_id: dict[int, str]) -> str:
-    # Newest year first, then newest document first within a year.
+    # Keep RSS chronology correct even when Vision assigns a lower document ID
+    # to a later month within the same edition year.
     ordered = [
         items_by_id[i]
-        for i in sorted(items_by_id, key=lambda i: (_year_of(items_by_id[i]), i), reverse=True)
+        for i in sorted(
+            items_by_id,
+            key=lambda i: (_block_date(items_by_id[i]), i),
+            reverse=True,
+        )
     ][: feed["max_items"]]
     now = format_datetime(dt.datetime.now(IST))
     self_url = f"{PUBLISHED_BASE_URL}/{feed['key']}/feed.xml" if PUBLISHED_BASE_URL else ""
@@ -324,14 +334,24 @@ def write_manifest(key: str, entries: list[dict]) -> None:
 def run_feed(session: requests.Session, feed: dict) -> int:
     print(f"[{feed['key']}]")
     now_year = dt.datetime.now(IST).year
-    ymap = doc_years(session, feed["section"])
-    # Select by the listing's year (not a doc-id cutoff), so low-id recent docs
-    # aren't missed; unknown-year docs are treated as current year.
-    ids = [i for i in sorted(ymap, reverse=True) if (ymap[i] or now_year) >= ARCHIVE_MIN_YEAR][
-        :MAX_FETCH
-    ]
-    print(f"  {feed['section']}: {len(ids)} document ids (year >= {ARCHIVE_MIN_YEAR})")
     existing = load_published(session, feed["key"])
+    ymap = doc_years(session, feed["section"])
+    # IDs are not reliably monotonic and month-bearing titles can sort
+    # differently from the listing. While the feed is below its cap, inspect the
+    # complete metadata listing and fetch details only for missing in-range IDs.
+    # At the cap, stop at published history so old aged-out items stay omitted.
+    ids = []
+    at_capacity = len(existing) >= feed["max_items"]
+    for item_id, year in ymap.items():
+        if item_id in existing:
+            if at_capacity:
+                break
+            continue
+        if (year or now_year) >= ARCHIVE_MIN_YEAR:
+            ids.append(item_id)
+        if len(ids) >= MAX_FETCH:
+            break
+    print(f"  {feed['section']}: {len(ids)} newer document ids")
     found = 0
     manifest: list[dict] = []
     with ThreadPoolExecutor(max_workers=WORKERS) as ex:

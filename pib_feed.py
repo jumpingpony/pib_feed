@@ -31,7 +31,7 @@ import os
 import re
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from email.utils import format_datetime
+from email.utils import format_datetime, parsedate_to_datetime
 from xml.sax.saxutils import escape
 
 import requests
@@ -46,7 +46,7 @@ PR_PERMALINK = BASE + "/PressReleasePage.aspx?PRID={id}"
 
 UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36"
+    "(KHTML, like Gecko) Chrome/151.0.7922.76 Safari/537.36"
 )
 IST = dt.timezone(dt.timedelta(hours=5, minutes=30))
 
@@ -355,7 +355,13 @@ def collect_ids(session: requests.Session, feed: dict, checked: set[int] | None 
     for year in YEARS:
         got = list_year(session, feed, year)
         catalog |= got
-        print(f"  {feed['key']} {year}: {len(got)}")
+        overlap = len(got & checked) if checked else 0
+        print(f"  {feed['key']} {year}: {len(got)} ({overlap} checked)")
+        # Listings are partitioned by publication year. Once the newest years
+        # reach IDs already covered by the cache, older year pages cannot contain
+        # newer articles. On a cold start, keep walking every configured year.
+        if checked and overlap:
+            break
     ids = sorted(catalog, reverse=True)
     # English-filtered feeds discard ~half, so fetch a wider window before capping.
     cap = feed["max_items"] * (3 if feed.get("english") else 1)
@@ -365,6 +371,17 @@ def collect_ids(session: requests.Session, feed: dict, checked: set[int] | None 
 # --- feed I/O -----------------------------------------------------------------
 ITEM_RE = re.compile(r"<item>.*?</item>", re.S)
 GUID_ID_RE = re.compile(r"(?:NoteId|PRID|[?&]Id)=(\d+)")
+PUBDATE_RE = re.compile(r"<pubDate>([^<]+)</pubDate>")
+
+
+def _block_date(block: str) -> dt.datetime:
+    match = PUBDATE_RE.search(block)
+    if match:
+        try:
+            return parsedate_to_datetime(match.group(1).strip())
+        except (TypeError, ValueError):
+            pass
+    return dt.datetime(1970, 1, 1, tzinfo=dt.timezone.utc)
 
 
 def load_published(session: requests.Session, key: str) -> tuple[dict[int, str], set[int]]:
@@ -429,7 +446,14 @@ def render_item(a: dict) -> str:
 
 
 def build_feed(feed: dict, items_by_id: dict[int, str]) -> str:
-    ordered = [items_by_id[i] for i in sorted(items_by_id, reverse=True)][: feed["max_items"]]
+    ordered = [
+        items_by_id[i]
+        for i in sorted(
+            items_by_id,
+            key=lambda i: (_block_date(items_by_id[i]), i),
+            reverse=True,
+        )
+    ][: feed["max_items"]]
     now = format_datetime(dt.datetime.now(IST))
     self_url = f"{PUBLISHED_BASE_URL}/{feed['key']}/feed.xml" if PUBLISHED_BASE_URL else ""
     atom = (
@@ -519,4 +543,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

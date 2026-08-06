@@ -427,7 +427,7 @@ def run_feed(session: requests.Session, key: str, now: dt.datetime) -> int:
     new = full = 0
     for it in items:
         if it["link"] in merged:
-            continue
+            break
         if new >= MAX_FETCH:
             break
         hero = ""

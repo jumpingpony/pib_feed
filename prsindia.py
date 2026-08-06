@@ -38,7 +38,7 @@ import requests
 BASE = "https://prsindia.org"
 UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+    "(KHTML, like Gecko) Chrome/151.0.7922.76 Safari/537.36"
 )
 IST = dt.timezone(dt.timedelta(hours=5, minutes=30))
 
@@ -324,7 +324,9 @@ def run_feed(session: requests.Session, feed: dict, now: dt.datetime) -> int:
         assign_dates(items, now)
         for it in items:
             if it["link"] in merged:
-                continue  # keep the stable first-seen date/block
+                if feed["bills"]:
+                    continue  # Bill Track is intentionally excluded from this optimization.
+                break  # newest-first listing has reached published history
             merged[it["link"]] = (it["when"], render_item(feed, it, it["when"]).strip())
     else:
         print(f"  {feed['key']}: listing fetch failed; keeping published only", file=sys.stderr)

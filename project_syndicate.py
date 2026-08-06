@@ -303,7 +303,7 @@ def main() -> int:
     new = full = 0
     for it in items:
         if it["link"] in merged:
-            continue
+            break
         hero, paras = parse_article(fetch(session, it["link"]))
         if len(paras) >= 2:
             full += 1

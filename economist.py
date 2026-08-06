@@ -469,9 +469,17 @@ def run_feed(session: requests.Session, key: str, manifest: list[dict], now: dt.
     page = fetch(session, FEEDS[key]["page"])
     listing = parse_listing(page) if page else []
     print(f"  listing: {len(listing)} articles")
+    newest_published = max((when for when, _ in merged.values()), default=None)
     new = 0
     for it in listing:
         if it["link"] in merged:
+            continue
+        # Topic payloads are curated rather than strictly chronological: a new
+        # item can appear below an already-published one. Use the source date as
+        # the boundary while independently skipping every known permalink.
+        if newest_published and (
+            it["date"] is None or it["date"] < newest_published
+        ):
             continue
         when, block = build_item(session, it, manifest, now)
         merged[it["link"]] = (when, block)

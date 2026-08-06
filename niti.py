@@ -39,7 +39,7 @@ BASE = "https://www.niti.gov.in"
 UA = os.environ.get(
     "NITI_UA",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+    "(KHTML, like Gecko) Chrome/151.0.7922.76 Safari/537.36",
 )
 IST = dt.timezone(dt.timedelta(hours=5, minutes=30))
 
@@ -255,18 +255,25 @@ def last_page(page_html: str) -> int:
     return min(max(nums), MAX_PAGES - 1) if nums else 0
 
 
-def collect(session: requests.Session, feed: dict) -> list[dict]:
-    """Walk the listing (newest first), stopping past the feed's min_date."""
+def collect(session: requests.Session, feed: dict, published_pdfs: set[str]) -> list[dict]:
+    """Walk newest-first until the listing reaches a published PDF."""
     min_date = feed.get("min_date") or DEFAULT_MIN_DATE
     first = fetch_text(session, urljoin(BASE, feed["path"]))
     if not first:
         return []
     if feed["parser"] == "anchors":
         rows = parse_anchors(first)
-        return [r for r in rows if r["date"] and r["date"].date().isoformat() >= min_date]
+        out = []
+        for row in rows:
+            if row["pdf"] in published_pdfs:
+                break
+            if row["date"] and row["date"].date().isoformat() >= min_date:
+                out.append(row)
+        return out
 
     pages = last_page(first)
     out, seen_pdf = [], set()
+    reached_history = False
     for p in range(pages + 1):
         page_html = first if p == 0 else fetch_text(session, urljoin(BASE, f"{feed['path']}?page={p}"))
         if not page_html:
@@ -278,6 +285,9 @@ def collect(session: requests.Session, feed: dict) -> list[dict]:
         for r in rows:
             if not r["date"] or r["pdf"] in seen_pdf:
                 continue
+            if r["pdf"] in published_pdfs:
+                reached_history = True
+                break
             if r["date"].date().isoformat() < min_date:
                 continue
             seen_pdf.add(r["pdf"])
@@ -285,7 +295,7 @@ def collect(session: requests.Session, feed: dict) -> list[dict]:
             in_range += 1
         # Listing is newest-first: once a full page is entirely older than min_date
         # (nothing in range) and we already have items, stop paging.
-        if in_range == 0 and out:
+        if reached_history or (in_range == 0 and out):
             break
     return out
 
@@ -427,8 +437,8 @@ def write_manifest(key: str, entries: list[dict]) -> None:
 
 def run_feed(session: requests.Session, feed: dict) -> int:
     print(f"[{feed['key']}]")
-    arts = collect(session, feed)
     merged = load_published(session, feed["key"])
+    arts = collect(session, feed, set(merged))
     new, manifest, seen_names = 0, [], set()
     for art in arts:
         if ARCHIVE_MODE == "archive":

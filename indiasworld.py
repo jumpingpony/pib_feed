@@ -7,10 +7,9 @@ its WordPress REST API (`wp-json/wp/v2/posts`) returns the **full rendered body*
 page of 50 posts carries everything: id, permalink, title, GMT publish date,
 full HTML body, excerpt and (via `_embed`) author + category names.
 
-The feed is reconstructed by walking the REST listing newest-first (stopping
-after two consecutive fully-known pages, or once MAX_FETCH new posts are taken),
-merging with the already-published copy (INDIASWORLD_PUBLISHED_BASE_URL) so
-history outlives what the API paginates, sorting newest-first and capping.
+The feed requests REST posts strictly after the newest published item, merging
+them with the already-published copy (INDIASWORLD_PUBLISHED_BASE_URL) so history
+outlives what the API paginates, sorting newest-first and capping.
 
 Output: public/<key>/feed.xml + index.html.
 """
@@ -32,7 +31,7 @@ API = f"{BASE}/wp-json/wp/v2/posts"
 UA = os.environ.get(
     "INDIASWORLD_UA",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+    "(KHTML, like Gecko) Chrome/151.0.7922.76 Safari/537.36",
 )
 IST = dt.timezone(dt.timedelta(hours=5, minutes=30))
 
@@ -306,6 +305,7 @@ def write_feed(feed: dict, xml: str, count: int) -> None:
 def run_feed(session: requests.Session, feed: dict) -> int:
     print(f"[{feed['key']}]")
     merged = load_published(session, feed["key"])
+    newest_published = max((when for when, _ in merged.values()), default=None)
     new = stale = 0
     for page_no in range(1, MAX_PAGES + 1):
         url = (
@@ -314,6 +314,11 @@ def run_feed(session: requests.Session, feed: dict) -> int:
         )
         if feed.get("category"):
             url += f"&categories={feed['category']}"
+        if newest_published:
+            after = newest_published.astimezone(dt.timezone.utc).strftime(
+                "%Y-%m-%dT%H:%M:%SZ"
+            )
+            url += f"&after={after}"
         posts = fetch_json(session, url)
         if not posts:
             break

@@ -49,7 +49,7 @@ import requests
 BASE = "https://idsa.in"
 UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+    "(KHTML, like Gecko) Chrome/151.0.7922.76 Safari/537.36"
 )
 IST = dt.timezone(dt.timedelta(hours=5, minutes=30))
 
@@ -335,16 +335,17 @@ def run_feed(session: requests.Session, feed: dict, now: dt.datetime) -> int:
             break
         page_new = 0
         for it in items:
-            if it["link"] not in merged:
-                when, precise = _parse_date(it["date_text"], rank)
-                if when is None:
-                    when = now - dt.timedelta(seconds=rank)
-                elif not precise:
-                    # year/month-only: keep strict listing order within the year
-                    when = min(when, now) - dt.timedelta(seconds=rank)
-                merged[it["link"]] = (when, render_item(it, when).strip())
-                page_new += 1
-                new_count += 1
+            if it["link"] in merged:
+                continue
+            when, precise = _parse_date(it["date_text"], rank)
+            if when is None:
+                when = now - dt.timedelta(seconds=rank)
+            elif not precise:
+                # year/month-only: keep strict listing order within the year
+                when = min(when, now) - dt.timedelta(seconds=rank)
+            merged[it["link"]] = (when, render_item(it, when).strip())
+            page_new += 1
+            new_count += 1
             rank += 1
         # Politeness / steady state: once a whole page is already published,
         # everything below it is older and known — stop crawling.

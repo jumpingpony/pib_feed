@@ -51,7 +51,7 @@ BASE = "https://epaper.indianexpress.com"
 UA = os.environ.get(
     "IE_EPAPER_UA",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+    "(KHTML, like Gecko) Chrome/151.0.7922.76 Safari/537.36",
 )
 IST = dt.timezone(dt.timedelta(hours=5, minutes=30))
 
@@ -283,12 +283,12 @@ def write_manifest(key: str, entries: list[dict]) -> None:
 
 def run_feed(session: requests.Session, feed: dict) -> int:
     print(f"[{feed['key']}]")
-    arts = collect(session, feed)
     existing = load_published(session, feed["key"])
+    arts = collect(session, feed)
     new, manifest = 0, []
     for art in arts:
         if art["id"] in existing:
-            continue  # already published: item points at the durable asset already
+            break  # newest-first index has reached published history
         if ARCHIVE_MODE == "archive":
             art["pdf"] = signed_pdf_url(session, feed, art["id"])
             if art["pdf"]:

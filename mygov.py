@@ -34,7 +34,7 @@ BASE = "https://www.mygov.in"
 
 UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+    "(KHTML, like Gecko) Chrome/151.0.7922.76 Safari/537.36"
 )
 IST = dt.timezone(dt.timedelta(hours=5, minutes=30))
 
@@ -144,19 +144,27 @@ def archival_name(key: str, art: dict) -> str:
     return f"mygov_{src}_{stamp}_{slug}.pdf"[:180]
 
 
-def collect(session: requests.Session, feed: dict) -> list[dict]:
+def collect(
+    session: requests.Session, feed: dict, published_ids: set[int]
+) -> list[dict]:
     items: dict[int, dict] = {}
+    newest_published_id = max(published_ids, default=0)
     for page_no in range(MAX_PAGES):
         page = fetch(session, f"{BASE}{feed['path']}?page={page_no}")
         if not page:
             break
+        listed = parse_page(page)
         fresh = 0
-        for art in parse_page(page):
-            if art["id"] not in items:
+        for art in listed:
+            if (
+                art["date"] is not None
+                and art["id"] > newest_published_id
+                and art["id"] not in items
+            ):
                 items[art["id"]] = art
                 fresh += 1
-        print(f"  {feed['key']} page={page_no}: +{fresh}")
-        if fresh == 0:  # no new PDFs on this page -> end of listing
+        print(f"  {feed['key']} page={page_no}: {len(listed)} listed, {fresh} newer")
+        if listed and fresh == 0:  # newest-first listing has reached feed history
             break
     return list(items.values())
 
@@ -267,8 +275,8 @@ def write_manifest(key: str, entries: list[dict]) -> None:
 # --- main ---------------------------------------------------------------------
 def run_feed(session: requests.Session, feed: dict) -> int:
     print(f"[{feed['key']}]")
-    arts = collect(session, feed)
     existing = load_published(session, feed["key"])
+    arts = collect(session, feed, set(existing))
     kept, manifest = 0, []
     for art in arts:
         year = art["date"].year if art["date"] else None

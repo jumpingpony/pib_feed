@@ -51,7 +51,7 @@ NX_IV = b"gqLOHUioQ0QjhuvI"
 
 UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+    "(KHTML, like Gecko) Chrome/151.0.7922.76 Safari/537.36"
 )
 IST = dt.timezone(dt.timedelta(hours=5, minutes=30))
 
@@ -114,7 +114,7 @@ DATE_RANGE_RE = re.compile(r"(\d{1,2})\s+([A-Za-z]+)\s*[-–]\s*(\d{1,2})\s+([A-
 NX_TITLE_RE = re.compile(r"([A-Za-z]+)[,]?\s+(20\d\d)")
 
 
-def collect_made_easy(session: requests.Session) -> list[dict]:
+def collect_made_easy(session: requests.Session, newest_id: int = 0) -> list[dict]:
     page = fetch(session, ME_WEEKLY)
     if not page:
         return []
@@ -149,6 +149,8 @@ def collect_made_easy(session: requests.Session) -> list[dict]:
         # (no captcha/lead needed), so link and archive the real PDF.
         pdf = f"{ME}/uploads/Files/{ft}"
         arch = f"madeeasy_weekly_{date.strftime('%Y-%m-%d')}.pdf" if date else f"madeeasy_{ft}"
+        if item_id <= newest_id:
+            continue
         out.append(
             {
                 "id": item_id,
@@ -196,9 +198,8 @@ def _nx_page(session: requests.Session, year: int, start: int) -> list[dict]:
     return payload.get("data") or []
 
 
-def collect_nextias(session: requests.Session) -> list[dict]:
-    """Enumerate the whole magazine archive via the encrypted API, newest first,
-    from ARCHIVE_MIN_YEAR to the current year."""
+def collect_nextias(session: requests.Session, newest_id: int = 0) -> list[dict]:
+    """Enumerate newer magazines, or the bounded archive on a cold start."""
     this_year = dt.datetime.now(IST).year
     out, seen = [], set()
     for year in range(this_year, ARCHIVE_MIN_YEAR - 1, -1):
@@ -207,6 +208,7 @@ def collect_nextias(session: requests.Session) -> list[dict]:
             recs = _nx_page(session, year, start)
             if not recs:
                 break
+            newer_on_page = 0
             for rec in recs:
                 pdf = (rec.get("pdf") or "").strip()
                 title_raw = " ".join((rec.get("title") or "").split())
@@ -221,12 +223,15 @@ def collect_nextias(session: requests.Session) -> list[dict]:
                 if not mon:
                     continue
                 crux = "crux" in title_raw.lower()
+                item_id = yr * 100 + mon
+                if item_id <= newest_id:
+                    continue
                 label = f"Monthly Current Affairs — {tm.group(1).title()} {yr}"
                 if crux:
                     label += " (The Crux)"
                 out.append(
                     {
-                        "id": yr * 100 + mon,
+                        "id": item_id,
                         "link": pdf,
                         "title": label,
                         "date": dt.datetime(yr, mon, 1, tzinfo=IST),
@@ -235,6 +240,9 @@ def collect_nextias(session: requests.Session) -> list[dict]:
                         f"{'_crux' if crux else ''}.pdf",
                     }
                 )
+                newer_on_page += 1
+            if newest_id and newer_on_page == 0:
+                return out
             if len(recs) < 6:
                 break
             start += len(recs)
@@ -278,7 +286,7 @@ def _guid_id(block: str) -> int | None:
     g = GUID_TAG_RE.search(block)
     if not g:
         return None
-    m = re.search(r"meca:(\d+)", g.group(1))
+    m = re.search(r"urn:meca:[^:]+:(\d+)", g.group(1))
     return int(m.group(1)) if m else None
 
 
@@ -383,8 +391,8 @@ def write_manifest(key: str, entries: list[dict]) -> None:
 
 def run_feed(session: requests.Session, feed: dict) -> int:
     print(f"[{feed['key']}]")
-    arts = feed["collect"](session)
     existing = load_published(session, feed["key"])
+    arts = feed["collect"](session, max(existing, default=0))
     kept_arts, manifest = 0, []
     for art in arts:
         year = art["date"].year if art["date"] else None

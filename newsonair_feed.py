@@ -20,13 +20,12 @@ previously-published copy so history grows past the source's rolling window.
 from __future__ import annotations
 
 import datetime as dt
-import hashlib
 import html
 import os
 import re
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from email.utils import format_datetime
+from email.utils import format_datetime, parsedate_to_datetime
 from urllib.parse import urlencode
 from xml.sax.saxutils import escape
 
@@ -129,7 +128,6 @@ BULLETIN_NONCE_RE = re.compile(
     r"security:\s*['\"]([^'\"]+)",
     re.S | re.I,
 )
-POSTID_RE = re.compile(r"postid-(\d+)")
 ENTRY_RE = re.compile(r'<div[^>]*class="[^"]*\bentry-content\b[^"]*"[^>]*>', re.I)
 # The transcript sits in `.entry-content`; the theme closes it with an explicit
 # HTML comment, after which sidebar widgets (Most Read, share bar, comments)
@@ -232,21 +230,9 @@ def scrape_bulletin(session: requests.Session, feed: dict, url: str, list_date: 
         return None
     body_html = "".join(f"<p>{escape(p)}</p>\n" for p in paras).strip()
     date = _parse_detail_date(page) or _fallback_date(list_date)
-    pid = POSTID_RE.search(page)
-    if pid:
-        item_id = int(pid.group(1))
-    else:  # fall back to the trailing number in the slug
-        sm = re.search(r"-(\d+)/?$", url)
-        # stable across runs (hash() is salted per-process)
-        item_id = (
-            int(sm.group(1))
-            if sm
-            else int(hashlib.md5(url.encode()).hexdigest(), 16) % (10**9)
-        )
     day = date.strftime("%d %b %Y") if date else list_date
     label = feed["title"].split(" - ")[0].strip().replace(" Bulletin", "")
     return {
-        "id": item_id,
         "link": url,
         "title": f"{label} — {day}",
         "date": date,
@@ -254,12 +240,24 @@ def scrape_bulletin(session: requests.Session, feed: dict, url: str, list_date: 
     }
 
 
-def collect_bulletins(session: requests.Session, feed: dict) -> list[dict]:
+def collect_bulletins(
+    session: requests.Session, feed: dict, published_urls: set[str]
+) -> list[dict]:
     listing = enumerate_bulletins(session, feed["slug"])
-    print(f"  {feed['key']}: {len(listing)} bulletins listed")
+    pending = [
+        (url, list_date)
+        for url, list_date in listing
+        if url not in published_urls
+    ]
+    print(
+        f"  {feed['key']}: {len(listing)} bulletins listed, "
+        f"{len(pending)} newer"
+    )
     out = []
     with ThreadPoolExecutor(max_workers=WORKERS) as ex:
-        futs = {ex.submit(scrape_bulletin, session, feed, u, d): u for u, d in listing}
+        futs = {
+            ex.submit(scrape_bulletin, session, feed, u, d): u for u, d in pending
+        }
         for fut in as_completed(futs):
             art = fut.result()
             if art:
@@ -269,29 +267,36 @@ def collect_bulletins(session: requests.Session, feed: dict) -> list[dict]:
 
 # --- feed I/O (shared shape with pib_feed.py) ---------------------------------
 ITEM_RE = re.compile(r"<item>.*?</item>", re.S)
-GUID_ID_RE = re.compile(r"[?&](?:p|Id)=(\d+)|/([a-z0-9-]+)-(\d+)/")
+PUBDATE_RE = re.compile(r"<pubDate>([^<]+)</pubDate>")
 
 
-def _guid_key(block: str) -> int | None:
-    # our own guids are permalinks; recover a stable int from the item link/guid
+def _guid_url(block: str) -> str | None:
     g = re.search(r"<guid[^>]*>([^<]+)</guid>", block)
-    src = g.group(1) if g else block
-    m = re.search(r"[?&]p=(\d+)", src) or re.search(r"-(\d+)/?\s*$", src.strip())
-    return int(m.group(1)) if m else None
+    return html.unescape(g.group(1)).strip() if g else None
 
 
-def load_published(session: requests.Session, key: str) -> dict[int, str]:
+def _block_date(block: str) -> dt.datetime:
+    match = PUBDATE_RE.search(block)
+    if match:
+        try:
+            return parsedate_to_datetime(match.group(1).strip())
+        except (TypeError, ValueError):
+            pass
+    return dt.datetime(1970, 1, 1, tzinfo=dt.timezone.utc)
+
+
+def load_published(session: requests.Session, key: str) -> dict[str, str]:
     if not PUBLISHED_BASE_URL:
         return {}
     body = fetch(session, f"{PUBLISHED_BASE_URL}/{key}/feed.xml")
     if not body:
         return {}
-    items: dict[int, str] = {}
+    items: dict[str, str] = {}
     for m in ITEM_RE.finditer(body):
         block = m.group(0).strip()
-        k = _guid_key(block)
-        if k is not None:
-            items[k] = block
+        url = _guid_url(block)
+        if url:
+            items[url] = block
     print(f"  {key}: loaded {len(items)} published items")
     return items
 
@@ -318,8 +323,10 @@ def render_item(a: dict) -> str:
     )
 
 
-def build_feed(feed: dict, items_by_id: dict[int, str]) -> str:
-    ordered = [items_by_id[i] for i in sorted(items_by_id, reverse=True)][: feed["max_items"]]
+def build_feed(feed: dict, items_by_url: dict[str, str]) -> str:
+    ordered = sorted(items_by_url.values(), key=_block_date, reverse=True)[
+        : feed["max_items"]
+    ]
     now = format_datetime(dt.datetime.now(IST))
     self_url = f"{PUBLISHED_BASE_URL}/{feed['key']}/feed.xml" if PUBLISHED_BASE_URL else ""
     atom = (
@@ -370,10 +377,10 @@ def write_landing() -> None:
 # --- main ---------------------------------------------------------------------
 def run_feed(session: requests.Session, feed: dict) -> int:
     print(f"[{feed['key']}]")
-    arts = collect_bulletins(session, feed)
     existing = load_published(session, feed["key"])
+    arts = collect_bulletins(session, feed, set(existing))
     for art in arts:
-        existing[art["id"]] = render_item(art).strip()
+        existing[art["link"]] = render_item(art).strip()
     xml = build_feed(feed, existing)
     kept = min(len(existing), feed["max_items"])
     write_feed(feed, xml, kept)

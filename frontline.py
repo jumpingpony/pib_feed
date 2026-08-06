@@ -42,7 +42,7 @@ BASE = "https://frontline.thehindu.com"
 UA = os.environ.get(
     "FL_UA",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+    "(KHTML, like Gecko) Chrome/151.0.7922.76 Safari/537.36",
 )
 IST = dt.timezone(dt.timedelta(hours=5, minutes=30))
 
@@ -434,8 +434,14 @@ def build_one(session: requests.Session, feed: dict, now: dt.datetime) -> None:
     print(f"  {len(candidates)} feeder candidates"
           + (f" (dropping sections: {', '.join(sorted(feed['drop']))})" if feed["drop"] else ""))
 
-    todo = [(u, w) for u, w in candidates if u not in merged][:MAX_FETCH]
-    if len(candidates) - len([u for u, _ in candidates if u in merged]) > MAX_FETCH:
+    newest_published = max((when for when, _ in merged.values()), default=None)
+    newer = [
+        (url, when)
+        for url, when in candidates
+        if url not in merged and (newest_published is None or when >= newest_published)
+    ]
+    todo = newer[:MAX_FETCH]
+    if len(newer) > MAX_FETCH:
         print(f"  capping new fetches at MAX_FETCH={MAX_FETCH}")
 
     new = full = 0
