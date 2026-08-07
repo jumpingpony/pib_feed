@@ -167,6 +167,7 @@ jobs:
         id: ie_epaper
         continue-on-error: true
         env:
+          GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
           IE_EPAPER_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
           # Epaper PDFs live behind signed, expiring URLs, so mirror them to the
           # release and point items at the durable asset.

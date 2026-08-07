@@ -27,8 +27,8 @@ that durable asset (`<key>_<YYYY-MM-DD>.pdf`). This module writes the
 `archive/<key>.json` manifest archive_pdfs.py consumes; the signed url in it
 only needs to stay valid the few minutes until archive_pdfs.py runs in the same
 CI job. To keep a daily's API load bounded, a signed url is minted only for
-issues not already carried in the published feed — once archived, the feed item
-already points at the durable asset.
+new issues and for published issues whose release asset is missing. The release
+inventory is read once with `gh`, so missing uploads are repaired on later runs.
 
 Per-feed `min_date` (or the ARCHIVE_MIN_DATE env fallback) bounds how far back to
 feed/archive. Output: public/<key>/feed.xml + index.html, merged with the
@@ -41,6 +41,7 @@ import datetime as dt
 import json
 import os
 import re
+import subprocess
 import sys
 from email.utils import format_datetime
 from xml.sax.saxutils import escape
@@ -124,6 +125,47 @@ def signed_pdf_url(session: requests.Session, feed: dict, issue_id: int) -> str 
         return None
     url = (j.get("data") or {}).get("fullpdf")
     return url.strip() if url else None
+
+
+def load_archive_assets() -> set[str] | None:
+    """List current release assets, or return None when verification is unavailable."""
+    if ARCHIVE_MODE != "archive" or not ARCHIVE_BASE_URL:
+        return None
+    match = re.fullmatch(
+        r"https://github\.com/([^/]+/[^/]+)/releases/download/([^/]+)",
+        ARCHIVE_BASE_URL,
+    )
+    if not match:
+        print("  cannot identify archive repository and tag", file=sys.stderr)
+        return None
+    repo, tag = match.groups()
+    try:
+        result = subprocess.run(
+            [
+                "gh",
+                "release",
+                "view",
+                tag,
+                "--repo",
+                repo,
+                "--json",
+                "assets",
+                "--jq",
+                ".assets[].name",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as e:
+        print(f"  cannot list archive assets: {e}", file=sys.stderr)
+        return None
+    if result.returncode != 0:
+        print(f"  cannot list archive assets: {result.stderr.strip()}", file=sys.stderr)
+        return None
+    assets = {line.strip() for line in result.stdout.splitlines() if line.strip()}
+    print(f"  archive inventory: {len(assets)} assets")
+    return assets
 
 
 def collect(session: requests.Session, feed: dict) -> list[dict]:
@@ -281,18 +323,24 @@ def write_manifest(key: str, entries: list[dict]) -> None:
     print(f"  {key}: manifest {len(entries)} pdfs -> {path}")
 
 
-def run_feed(session: requests.Session, feed: dict) -> int:
+def run_feed(
+    session: requests.Session, feed: dict, archive_assets: set[str] | None
+) -> int:
     print(f"[{feed['key']}]")
     existing = load_published(session, feed["key"])
     arts = collect(session, feed)
-    new, manifest = 0, []
+    new, repairs, manifest = 0, 0, []
     for art in arts:
-        if art["id"] in existing:
-            break  # newest-first index has reached published history
-        if ARCHIVE_MODE == "archive":
+        published = art["id"] in existing
+        missing_asset = archive_assets is not None and art["archival_name"] not in archive_assets
+        if ARCHIVE_MODE == "archive" and (not published or missing_asset):
             art["pdf"] = signed_pdf_url(session, feed, art["id"])
             if art["pdf"]:
                 manifest.append({"name": art["archival_name"], "url": art["pdf"]})
+                if published:
+                    repairs += 1
+        if published:
+            continue
         existing[art["id"]] = render_item(art).strip()
         new += 1
     if ARCHIVE_MODE == "archive":
@@ -300,14 +348,18 @@ def run_feed(session: requests.Session, feed: dict) -> int:
     xml = build_feed(feed, existing)
     kept = min(len(existing), feed["max_items"])
     write_feed(feed, xml, kept)
-    print(f"  {feed['key']}: +{new} new, {len(manifest)} to archive, feed now {kept}")
+    print(
+        f"  {feed['key']}: +{new} new, {repairs} repairs, "
+        f"{len(manifest)} to archive, feed now {kept}"
+    )
     return kept
 
 
 def main() -> int:
     session = make_session()
     print(f"ARCHIVE_MODE={ARCHIVE_MODE} default_min_date={ARCHIVE_MIN_DATE}")
-    counts = {feed["key"]: run_feed(session, feed) for feed in FEEDS}
+    archive_assets = load_archive_assets()
+    counts = {feed["key"]: run_feed(session, feed, archive_assets) for feed in FEEDS}
     print("Done:", counts)
     return 0
 

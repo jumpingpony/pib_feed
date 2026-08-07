@@ -221,6 +221,7 @@ for archival with the year up front, e.g.
 | `VIS_MAX_FETCH` | `80` | Vision document window per feed |
 | `ARCHIVE_MANIFEST_DIR` | `archive` | Where the manifests are written |
 | `ARCHIVE_RELEASE_TAG` | `pdf-archive` | Release tag the assets live under |
+| `ARCHIVE_REFERENCE_DIR` | `public` | Generated feeds whose archive links are checked against release assets |
 
 ## Local run
 
@@ -516,7 +517,9 @@ PDF is mirrored to the `pdf-archive` GitHub Release by `archive_pdfs.py` and the
 item body links that durable asset (`<key>_<YYYY-MM-DD>.pdf`). The manifest's
 signed source URL only has to stay valid for the few minutes until
 `archive_pdfs.py` runs in the same CI job. To keep a daily's API load bounded, a
-signed URL is minted only for issues not already carried in the published feed.
+signed URL is minted only for new issues and published issues whose release
+asset is missing. The release inventory is read once with `gh`; CI supplies its
+`GITHUB_TOKEN`, while local archive-mode runs use the active `gh` authentication.
 
 ## Configuration (env vars)
 

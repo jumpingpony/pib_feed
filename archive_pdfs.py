@@ -17,30 +17,39 @@ meca.py when run with *_ARCHIVE_MODE=archive. Each is a list of {name, url}:
 PDF. This script uploads any manifest entry not already present as an asset on
 the release, downloading each PDF straight to a temp file and deleting it after
 upload. Already-present assets are skipped, so it is safe to run every build.
+After uploading, every release URL referenced by the generated feeds is checked
+against the release asset list. Missing assets and individual upload failures
+make the script exit nonzero so CI cannot silently publish broken archive links.
 
 Requires the `gh` CLI authenticated with a token that can edit releases
 (GITHUB_TOKEN in Actions). Configure via env:
     ARCHIVE_RELEASE_TAG   release tag/name to store assets under (default pdf-archive)
     ARCHIVE_MANIFEST_DIR  where the *.json manifests live (default archive)
+    ARCHIVE_REFERENCE_DIR generated feeds to verify (default public)
 """
 from __future__ import annotations
 
 import glob
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
 import time
+from urllib.parse import unquote
 
 import requests
 
 TAG = os.environ.get("ARCHIVE_RELEASE_TAG", "pdf-archive")
 MANIFEST_DIR = os.environ.get("ARCHIVE_MANIFEST_DIR", "archive")
+REFERENCE_DIR = os.environ.get("ARCHIVE_REFERENCE_DIR", "public")
 # Overridable because some sources (e.g. Economist content-assets images) are
 # Cloudflare-protected and only serve to a specific whitelisted UA.
 UA = os.environ.get(
-    "ARCHIVE_UA", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0 Safari/537.36"
+    "ARCHIVE_UA",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/151.0.7922.76 Safari/537.36",
 )
 TIMEOUT = int(os.environ.get("ARCHIVE_TIMEOUT", "120"))
 # GitHub rejects release assets over 2 GB; skip anything absurd defensively.
@@ -127,6 +136,23 @@ def load_manifests() -> dict[str, str]:
     return wanted
 
 
+def referenced_assets() -> set[str]:
+    """Return release assets linked by the generated feeds for this tag."""
+    marker = re.compile(
+        rf"/releases/download/{re.escape(TAG)}/([^\s<>'\"?#]+)", re.I
+    )
+    referenced: set[str] = set()
+    for path in glob.glob(os.path.join(REFERENCE_DIR, "**", "feed.xml"), recursive=True):
+        try:
+            with open(path, encoding="utf-8") as f:
+                body = f.read()
+        except OSError as e:
+            print(f"  cannot inspect {path}: {e}", file=sys.stderr)
+            continue
+        referenced.update(unquote(m.group(1)) for m in marker.finditer(body))
+    return referenced
+
+
 def upload(name: str, url: str) -> bool:
     try:
         with requests.get(url, stream=True, timeout=TIMEOUT, headers={"User-Agent": UA}) as r:
@@ -157,18 +183,31 @@ def upload(name: str, url: str) -> bool:
 
 def main() -> int:
     wanted = load_manifests()
-    if not wanted:
-        print("no manifest entries; nothing to archive")
-        return 0
     ensure_release()
     have = existing_assets()
     todo = {n: u for n, u in wanted.items() if n not in have}
     print(f"manifest={len(wanted)} present={len(have)} to-upload={len(todo)}")
     ok = 0
+    failed: list[str] = []
     for name, url in todo.items():
         if upload(name, url):
             ok += 1
+            have.add(name)
+        else:
+            failed.append(name)
     print(f"done: uploaded {ok}/{len(todo)}")
+
+    missing = sorted(referenced_assets() - have)
+    for name in missing:
+        print(f"  missing release asset: {name}", file=sys.stderr)
+    if failed or missing:
+        print(
+            f"archive incomplete: {len(failed)} upload failures, "
+            f"{len(missing)} referenced assets missing",
+            file=sys.stderr,
+        )
+        return 1
+    print("archive references verified")
     return 0
 
 
