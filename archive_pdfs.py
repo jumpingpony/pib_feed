@@ -17,7 +17,7 @@ meca.py when run with *_ARCHIVE_MODE=archive. Each is a list of {name, url}:
 PDF. This script uploads any manifest entry not already present as an asset on
 the release, downloading each PDF straight to a temp file and deleting it after
 upload. Already-present assets are skipped, so it is safe to run every build.
-After uploading, every release URL referenced by the generated feeds is checked
+After uploading, release URLs in recently published feed items are checked
 against the release asset list. Missing assets and individual upload failures
 make the script exit nonzero so CI cannot silently publish broken archive links.
 
@@ -26,9 +26,11 @@ Requires the `gh` CLI authenticated with a token that can edit releases
     ARCHIVE_RELEASE_TAG   release tag/name to store assets under (default pdf-archive)
     ARCHIVE_MANIFEST_DIR  where the *.json manifests live (default archive)
     ARCHIVE_REFERENCE_DIR generated feeds to verify (default public)
+    ARCHIVE_VERIFY_DAYS   recent publication window to verify (default 1)
 """
 from __future__ import annotations
 
+import datetime as dt
 import glob
 import json
 import os
@@ -37,6 +39,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from email.utils import parsedate_to_datetime
 from urllib.parse import unquote
 
 import requests
@@ -44,6 +47,7 @@ import requests
 TAG = os.environ.get("ARCHIVE_RELEASE_TAG", "pdf-archive")
 MANIFEST_DIR = os.environ.get("ARCHIVE_MANIFEST_DIR", "archive")
 REFERENCE_DIR = os.environ.get("ARCHIVE_REFERENCE_DIR", "public")
+VERIFY_DAYS = max(1, int(os.environ.get("ARCHIVE_VERIFY_DAYS", "1")))
 # Overridable because some sources (e.g. Economist content-assets images) are
 # Cloudflare-protected and only serve to a specific whitelisted UA.
 UA = os.environ.get(
@@ -136,11 +140,17 @@ def load_manifests() -> dict[str, str]:
     return wanted
 
 
-def referenced_assets() -> set[str]:
-    """Return release assets linked by the generated feeds for this tag."""
+def referenced_assets(now: dt.datetime | None = None) -> set[str]:
+    """Return release assets linked by recently published feed items."""
     marker = re.compile(
         rf"/releases/download/{re.escape(TAG)}/([^\s<>'\"?#]+)", re.I
     )
+    item_marker = re.compile(r"<item\b.*?</item>", re.S | re.I)
+    date_marker = re.compile(r"<pubDate>([^<]+)</pubDate>", re.I)
+    now = now or dt.datetime.now(dt.timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=dt.timezone.utc)
+    cutoff = now - dt.timedelta(days=VERIFY_DAYS)
     referenced: set[str] = set()
     for path in glob.glob(os.path.join(REFERENCE_DIR, "**", "feed.xml"), recursive=True):
         try:
@@ -149,7 +159,18 @@ def referenced_assets() -> set[str]:
         except OSError as e:
             print(f"  cannot inspect {path}: {e}", file=sys.stderr)
             continue
-        referenced.update(unquote(m.group(1)) for m in marker.finditer(body))
+        for item in item_marker.findall(body):
+            date_match = date_marker.search(item)
+            if date_match:
+                try:
+                    published = parsedate_to_datetime(date_match.group(1))
+                    if published.tzinfo is None:
+                        published = published.replace(tzinfo=dt.timezone.utc)
+                    if published < cutoff:
+                        continue
+                except (TypeError, ValueError):
+                    pass
+            referenced.update(unquote(m.group(1)) for m in marker.finditer(item))
     return referenced
 
 

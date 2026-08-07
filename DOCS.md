@@ -222,6 +222,7 @@ for archival with the year up front, e.g.
 | `ARCHIVE_MANIFEST_DIR` | `archive` | Where the manifests are written |
 | `ARCHIVE_RELEASE_TAG` | `pdf-archive` | Release tag the assets live under |
 | `ARCHIVE_REFERENCE_DIR` | `public` | Generated feeds whose archive links are checked against release assets |
+| `ARCHIVE_VERIFY_DAYS` | `1` | Number of recent publication days whose feed archive links are verified |
 
 ## Local run
 
