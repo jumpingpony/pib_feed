@@ -21,6 +21,11 @@ pages expose `content.body`, a list of typed components (PARAGRAPH with ready
   economist-schools-brief /schools-brief — the explainer essays (and, lately,
                           interactive "primers" which carry no __NEXT_DATA__
                           body; those degrade to teaser image + rubric + link).
+  economist-podcasts     /podcasts — every listed episode, with its direct MP3
+                          URL as an RSS enclosure and the full transcript in the
+                          item body. "Editor's Picks" narrated articles expose
+                          their source-article link instead of a transcript, so
+                          that full article body is used as the transcript.
 
 Images: economist.com/content-assets images are Cloudflare-protected too, so a
 plain RSS reader cannot hotlink them. In archive mode (ECON_ARCHIVE_MODE=archive
@@ -44,6 +49,7 @@ import os
 import re
 import sys
 from email.utils import format_datetime, parsedate_to_datetime
+from urllib.parse import urlsplit, urlunsplit
 from xml.sax.saxutils import escape
 
 import requests
@@ -53,7 +59,14 @@ BASE = "https://www.economist.com"
 UA = os.environ.get(
     "ECON_UA",
     "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/127.0.6533.103 Mobile Safari/537.36 Liskov",
+    "(KHTML, like Gecko) Chrome/151.0.7922.76 Mobile Safari/537.36 Liskov",
+)
+# Use the repository-standard UA once a request leaves economist.com. In
+# particular, the one-byte range probe against the MP3 host does not need the
+# Economist-only Liskov token.
+HTTP_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/151.0.7922.76 Safari/537.36"
 )
 IST = dt.timezone(dt.timedelta(hours=5, minutes=30))
 
@@ -107,6 +120,16 @@ FEEDS = {
         "html": f"{BASE}/topics/business",
         "max_items": 120,
         "archive_images": True,
+    },
+    "economist-podcasts": {
+        "title": "Podcasts - Economist",
+        "desc": "Unofficial full-transcript podcast feed from The Economist, "
+        "with direct MP3 enclosures.",
+        "page": f"{BASE}/podcasts",
+        "html": f"{BASE}/podcasts",
+        "max_items": 120,
+        "archive_images": True,
+        "kind": "podcast",
     },
 }
 
@@ -275,6 +298,18 @@ def render_body(content: dict, manifest: list[dict]) -> tuple[str, str]:
             fig = render_image_component(comp, manifest)
             if fig:
                 parts.append(fig)
+        elif ctype in ("UNORDERED_LIST", "ORDERED_LIST"):
+            items = []
+            for item in comp.get("items") or []:
+                if not isinstance(item, dict):
+                    continue
+                inner = item.get("textHtml") or escape(as_text(item.get("text") or ""))
+                if inner:
+                    items.append(f"<li>{inner}</li>")
+                    texts.append(clean(inner))
+            if items:
+                tag = "ol" if ctype == "ORDERED_LIST" else "ul"
+                parts.append(f"<{tag}>" + "".join(items) + f"</{tag}>")
         elif comp.get("textHtml") or comp.get("text"):
             inner = comp.get("textHtml") or escape(comp.get("text", ""))
             if ctype in ("SUBHEADING", "CROSSHEAD", "HEADING"):
@@ -311,6 +346,7 @@ def parse_listing(page: str) -> list[dict]:
                 "rubric": clean(a.get("rubric") or ""),
                 "date": parse_iso(a.get("datePublished") or a.get("dateRevised")),
                 "image": canonical_image(((a.get("image") or {}) or {}).get("url", "")),
+                "duration": clean(a.get("duration") or ""),
             }
         )
     return out
@@ -335,6 +371,8 @@ ITEM_TITLE_RE = re.compile(r"<title>(.*?)</title>", re.S)
 CONTENT_RE = re.compile(
     r"<content:encoded><!\[CDATA\[(.*?)\]\]></content:encoded>", re.S
 )
+AUDIO_ENCLOSURE_RE = re.compile(r"<enclosure\b[^>]*\btype=\"audio/", re.I)
+TRANSCRIPT_MARKER = "<h2>Transcript</h2>"
 
 
 def _block_link(block: str) -> str | None:
@@ -361,6 +399,13 @@ def _block_has_full_body(block: str) -> bool:
     return bool(body) and "Read on economist.com</a>" not in body
 
 
+def _block_complete(key: str, block: str) -> bool:
+    """Return whether an item has all source-specific payloads worth retrying."""
+    if FEEDS[key].get("kind") == "podcast":
+        return bool(AUDIO_ENCLOSURE_RE.search(block)) and TRANSCRIPT_MARKER in block
+    return _block_has_full_body(block)
+
+
 def _item_from_block(link: str, when: dt.datetime, block: str) -> dict:
     """Build minimal listing metadata for repairing an older RSS item."""
     m = ITEM_TITLE_RE.search(block)
@@ -372,6 +417,7 @@ def _item_from_block(link: str, when: dt.datetime, block: str) -> dict:
         "rubric": "",
         "date": when,
         "image": "",
+        "duration": "",
     }
 
 
@@ -391,15 +437,37 @@ def load_published(session: requests.Session, key: str) -> dict[str, tuple[dt.da
     return items
 
 
-def render_item(link: str, title: str, body_html: str, summary: str, when: dt.datetime) -> str:
+def render_item(
+    link: str,
+    title: str,
+    body_html: str,
+    summary: str,
+    when: dt.datetime,
+    enclosure: tuple[str, int, str] | None = None,
+    duration: str = "",
+) -> str:
     if not summary:
         summary = clean(body_html)[:500]
+    enclosure_xml = ""
+    if enclosure:
+        media_url, media_length, media_type = enclosure
+        enclosure_xml = (
+            f'      <enclosure url="{escape(media_url)}" length="{media_length}" '
+            f'type="{escape(media_type)}" />\n'
+        )
+    duration_xml = (
+        f"      <itunes:duration>{escape(duration)}</itunes:duration>\n"
+        if duration
+        else ""
+    )
     return (
         "    <item>\n"
         f"      <title>{escape(xml_safe(title))}</title>\n"
         f"      <link>{escape(link)}</link>\n"
         f"      <guid isPermaLink=\"true\">{escape(link)}</guid>\n"
         f"      <pubDate>{format_datetime(when)}</pubDate>\n"
+        f"{enclosure_xml}"
+        f"{duration_xml}"
         f"      <description>{escape(xml_safe(summary))}</description>\n"
         f"      <content:encoded><![CDATA[{cdata(body_html)}]]></content:encoded>\n"
         "    </item>"
@@ -417,10 +485,15 @@ def build_feed(key: str, items: dict[str, tuple[dt.datetime, str]]) -> tuple[str
         if self_url
         else ""
     )
+    itunes = (
+        ' xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"'
+        if feed.get("kind") == "podcast"
+        else ""
+    )
     xml = (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         '<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/" '
-        'xmlns:atom="http://www.w3.org/2005/Atom">\n'
+        f'xmlns:atom="http://www.w3.org/2005/Atom"{itunes}>\n'
         "  <channel>\n"
         f"    <title>{escape(feed['title'])}</title>\n"
         f"    <link>{escape(feed['html'])}</link>\n"
@@ -461,11 +534,169 @@ def write_manifest(entries: list[dict]) -> None:
     print(f"  image manifest: {len(entries)} images -> {path}")
 
 
+# --- podcasts ----------------------------------------------------------------
+HREF_RE = re.compile(r'href=["\']([^"\']+)', re.I)
+DATED_ARTICLE_RE = re.compile(r"^/[^/]+/\d{4}/\d{2}/\d{2}/")
+CONTENT_RANGE_RE = re.compile(r"/([0-9]+)$")
+
+
+def podcast_source_article(content: dict) -> str:
+    """Find the narrated article linked from an Editor's Picks show note."""
+    preferred: list[str] = []
+    fallback: list[str] = []
+    for component in content.get("body") or []:
+        if not isinstance(component, dict):
+            continue
+        for raw_url in HREF_RE.findall(component.get("textHtml") or ""):
+            candidate = html.unescape(raw_url)
+            parsed = urlsplit(candidate)
+            if parsed.hostname not in ("economist.com", "www.economist.com"):
+                continue
+            if not DATED_ARTICLE_RE.match(parsed.path) or parsed.path.startswith("/podcasts/"):
+                continue
+            canonical = urlunsplit(("https", "www.economist.com", parsed.path, "", ""))
+            if "audio.podcast" in parsed.query or "editorspicks" in parsed.query:
+                preferred.append(canonical)
+            else:
+                fallback.append(canonical)
+    candidates = preferred + fallback
+    return candidates[0] if candidates else ""
+
+
+def probe_audio(session: requests.Session, url: str) -> tuple[int, str]:
+    """Read one MP3 byte to obtain the enclosure's total byte length."""
+    last = None
+    for _ in range(RETRIES + 1):
+        response = None
+        try:
+            response = session.get(
+                url,
+                headers={
+                    "User-Agent": HTTP_UA,
+                    "Accept": "audio/mpeg,*/*;q=0.8",
+                    "Range": "bytes=0-0",
+                },
+                timeout=TIMEOUT,
+                allow_redirects=True,
+                stream=True,
+            )
+            if response.status_code in (200, 206):
+                match = CONTENT_RANGE_RE.search(response.headers.get("Content-Range", ""))
+                length = (
+                    int(match.group(1))
+                    if match
+                    else int(response.headers.get("Content-Length", "0"))
+                )
+                media_type = response.headers.get("Content-Type", "audio/mpeg").split(";", 1)[0]
+                if not media_type.startswith("audio/"):
+                    media_type = "audio/mpeg"
+                return length, media_type
+            last = f"HTTP {response.status_code}"
+        except (requests.RequestException, ValueError) as exc:  # pragma: no cover - network
+            last = str(exc)
+        finally:
+            if response is not None:
+                response.close()
+    if last:
+        print(f"  audio probe failed {urlsplit(url).netloc}: {last}", file=sys.stderr)
+    return 0, "audio/mpeg"
+
+
+def build_podcast_item(
+    session: requests.Session,
+    it: dict,
+    content: dict,
+    manifest: list[dict],
+    now: dt.datetime,
+) -> tuple[dt.datetime, str]:
+    podcast = content.get("podcast") or {}
+    audio = podcast.get("audio") or {}
+    audio_url = (audio.get("url") or "").strip()
+    duration = clean(audio.get("duration") or it.get("duration") or "")
+    when = (
+        parse_iso(podcast.get("publishedDate"))
+        or parse_iso(content.get("datePublished"))
+        or it.get("date")
+        or now
+    )
+
+    parts: list[str] = []
+    lead = content.get("leadComponent")
+    if isinstance(lead, dict):
+        image = render_image_component(lead, manifest)
+        if image:
+            parts.append(image)
+    show = clean(((podcast.get("show") or {}).get("title")) or it.get("flyTitle") or "")
+    if show:
+        parts.append(f"<p><strong>{escape(show)}</strong></p>")
+    rubric = clean(content.get("rubric") or it.get("rubric") or "")
+    if rubric:
+        parts.append(f"<p><em>{escape(rubric)}</em></p>")
+    if audio_url:
+        parts.append(
+            f'<audio controls="controls" preload="none" src="{escape(audio_url)}"></audio>'
+        )
+
+    notes_html, _ = render_body(content, manifest)
+    if notes_html:
+        parts.extend(("<h2>Show notes</h2>", notes_html))
+
+    transcript = podcast.get("transcript") or {}
+    transcript_html, transcript_summary = render_body(
+        {"body": transcript.get("body") or []}, manifest
+    )
+    source_url = ""
+    if not transcript_html:
+        source_url = podcast_source_article(content)
+        source_page = fetch(session, source_url) if source_url else None
+        source_content = page_content(source_page) if source_page else None
+        if source_content:
+            transcript_html, transcript_summary = render_body(source_content, manifest)
+    if transcript_html:
+        parts.append(TRANSCRIPT_MARKER)
+        if source_url:
+            parts.append(
+                "<p><em>This episode narrates "
+                f'<a href="{escape(source_url)}">the linked Economist article</a>; '
+                "its complete text is reproduced below as the transcript.</em></p>"
+            )
+        parts.append(transcript_html)
+    else:
+        parts.append(
+            f'<p><a href="{escape(it["link"])}">Transcript on economist.com</a></p>'
+        )
+
+    enclosure = None
+    if audio_url:
+        length, media_type = probe_audio(session, audio_url)
+        enclosure = (audio_url, length, media_type)
+    title = clean(podcast.get("title") or content.get("headline") or it["headline"])
+    summary = rubric or transcript_summary
+    block = render_item(
+        it["link"],
+        title,
+        "\n".join(parts),
+        summary,
+        when,
+        enclosure=enclosure,
+        duration=duration,
+    )
+    return when, block.strip()
+
+
 # --- per-feed builder ---------------------------------------------------------
-def build_item(session: requests.Session, it: dict, manifest: list[dict], now: dt.datetime) -> tuple[dt.datetime, str]:
+def build_item(
+    session: requests.Session,
+    key: str,
+    it: dict,
+    manifest: list[dict],
+    now: dt.datetime,
+) -> tuple[dt.datetime, str]:
     """Fetch a detail page and render a full item; fall back gracefully."""
     detail = fetch(session, it["link"])
     content = page_content(detail) if detail else None
+    if FEEDS[key].get("kind") == "podcast" and content:
+        return build_podcast_item(session, it, content, manifest, now)
     body_html, summary = ("", "")
     if content:
         body_html, summary = render_body(content, manifest)
@@ -511,13 +742,13 @@ def run_feed(session: requests.Session, key: str, manifest: list[dict], now: dt.
             it["date"] is None or it["date"] < newest_published
         ):
             continue
-        when, block = build_item(session, it, manifest, now)
+        when, block = build_item(session, key, it, manifest, now)
         merged[it["link"]] = (when, block)
         attempted.add(it["link"])
         new += 1
 
     latest = sorted(merged.items(), key=lambda pair: pair[1][0], reverse=True)[:5]
-    missing = [entry for entry in latest if not _block_has_full_body(entry[1][1])]
+    missing = [entry for entry in latest if not _block_complete(key, entry[1][1])]
     repaired = 0
     for link, (when, block) in missing:
         # New items were already fetched above. Retry an incomplete one on the
@@ -525,13 +756,13 @@ def run_feed(session: requests.Session, key: str, manifest: list[dict], now: dt.
         if link in attempted:
             continue
         it = listing_by_link.get(link) or _item_from_block(link, when, block)
-        repaired_when, repaired_block = build_item(session, it, manifest, now)
-        if _block_has_full_body(repaired_block):
+        repaired_when, repaired_block = build_item(session, key, it, manifest, now)
+        if _block_complete(key, repaired_block):
             merged[link] = (repaired_when, repaired_block)
             repaired += 1
 
     unresolved = sum(
-        not _block_has_full_body(merged[link][1]) for link, _ in latest
+        not _block_complete(key, merged[link][1]) for link, _ in latest
     )
     print(
         f"  body check: latest {len(latest)}, missing {len(missing)}, "

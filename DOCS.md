@@ -726,6 +726,7 @@ Full-text RSS feeds for [The Economist](https://www.economist.com), built by
 | Finance & economics | the weekly Finance & economics articles | [feed.xml](https://nappingcats.github.io/pib_feed/economist-finance-and-economics/feed.xml) |
 | Schools brief | the explainer essays / primers | [feed.xml](https://nappingcats.github.io/pib_feed/economist-schools-brief/feed.xml) |
 | Economic & financial indicators | the weekly economic-data & chart pages | [feed.xml](https://nappingcats.github.io/pib_feed/economist-indicators/feed.xml) |
+| Podcasts | direct MP3 enclosures and complete transcripts | [feed.xml](https://nappingcats.github.io/pib_feed/economist-podcasts/feed.xml) |
 
 ## Why this exists
 
@@ -754,6 +755,13 @@ published copy so history survives past the ~12-item scan window. Every run
 also retries incomplete items among the five newest entries and replaces a
 fallback once the full body becomes available.
 
+Podcast detail payloads expose the direct MP3 under `content.podcast.audio.url`
+and speaker-and-timestamp transcript components under
+`content.podcast.transcript.body`. The feed publishes the MP3 as an RSS
+`enclosure` and renders every transcript component in `content:encoded`.
+Narrated Editor's Picks episodes have no separate transcript; their show notes
+link to the source article, whose complete Liskov-exposed body is used instead.
+
 ## Configuration (env vars)
 
 | Var | Default | Meaning |
@@ -772,6 +780,8 @@ The feed list is the `FEEDS` table in `economist.py`.
   changes, the extractor needs rework.
 - Interactive "primers" carry no `__NEXT_DATA__` body and degrade to teaser
   image + rubric + link.
+- A podcast remains in the feed when its MP3 or transcript is temporarily
+  unavailable, and the newest incomplete entries are retried on later runs.
 - Unofficial and unaffiliated; content © The Economist.
 
 ---

@@ -228,7 +228,7 @@ jobs:
           ARCHIVE_RELEASE_TAG: image-archive
           ARCHIVE_MANIFEST_DIR: image_archive
           # content-assets images 403 to a generic UA; use the whitelisted one.
-          ARCHIVE_UA: "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.6533.103 Mobile Safari/537.36 Liskov"
+          ARCHIVE_UA: "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.7922.76 Mobile Safari/537.36 Liskov"
         run: python archive_pdfs.py
 
       # Publish whatever built (this runs before the gate so a failed feed never
