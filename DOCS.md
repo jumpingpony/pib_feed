@@ -750,7 +750,9 @@ each body image is rewritten to a durable copy on a GitHub Release and recorded
 in a manifest under `ECON_ARCHIVE_MANIFEST_DIR`; `archive_pdfs.py` (run with the
 Liskov UA) does the mirroring. This uses a **separate** manifest dir + release
 tag (`image-archive`) from the PDF feeds. Each feed merges its previously
-published copy so history survives past the ~12-item scan window.
+published copy so history survives past the ~12-item scan window. Every run
+also retries incomplete items among the five newest entries and replaces a
+fallback once the full body becomes available.
 
 ## Configuration (env vars)
 
@@ -796,9 +798,10 @@ site serves the full body to Google for SEO). The UA alone isn't enough — the
 site verifies the crawler by client IP — but it trusts the `X-Forwarded-For`
 header, so Googlebot UA **plus** `X-Forwarded-For: <a googlebot IP>` unlocks the
 complete article. The body is read from the `<p data-line-id="...">` paragraphs
-plus the og:image hero; images are on PS's own CDN and hotlink fine. Only
-articles not already published are fetched, and the feed merges its previously
-published copy so it grows past the 20-item RSS window.
+plus the og:image hero; images are on PS's own CDN and hotlink fine. New
+articles and incomplete items among the five newest entries are fetched, and
+the feed merges its previously published copy so it grows past the 20-item RSS
+window.
 
 ## Configuration (env vars)
 

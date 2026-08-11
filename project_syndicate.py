@@ -17,10 +17,11 @@ then read from the `<p data-line-id="...">` paragraphs of the commentary (these
 carry the real prose, with inline links preserved), plus the og:image hero.
 Images are on project-syndicate's own CDN and hotlink fine, so no archiving.
 
-Steady state is polite: only articles not already in the published feed are
-fetched. Output: public/project-syndicate/feed.xml + index.html, merged with
-the previously-published copy (PS_PUBLISHED_BASE_URL) so the feed grows past the
-20-item RSS window and survives a transient failure or a subscriber-only item.
+Steady state is polite: new articles are fetched, along with any incomplete
+items among the five newest published entries. Output:
+public/project-syndicate/feed.xml + index.html, merged with the previously
+published copy (PS_PUBLISHED_BASE_URL) so the feed grows past the 20-item RSS
+window and survives a transient failure or a subscriber-only item.
 """
 from __future__ import annotations
 
@@ -184,6 +185,10 @@ def parse_article(page: str) -> tuple[str, list[str]]:
 # --- feed I/O -----------------------------------------------------------------
 FEEDLINK_RE = re.compile(r"<link>([^<]+)</link>")
 PUBDATE_RE = re.compile(r"<pubDate>([^<]+)</pubDate>")
+CONTENT_RE = re.compile(
+    r"<content:encoded><!\[CDATA\[(.*?)\]\]></content:encoded>", re.S
+)
+PARAGRAPH_RE = re.compile(r"<p(?:\s|>)", re.I)
 
 
 def _block_link(block: str) -> str | None:
@@ -199,6 +204,30 @@ def _block_date(block: str) -> dt.datetime:
         except (TypeError, ValueError):
             pass
     return dt.datetime(1970, 1, 1, tzinfo=dt.timezone.utc)
+
+
+def _block_has_full_body(block: str) -> bool:
+    """Return whether a stored item contains at least two article paragraphs."""
+    m = CONTENT_RE.search(block)
+    if not m:
+        return False
+    body = m.group(1).strip()
+    if not body or "Read on project-syndicate.org</a>" in body:
+        return False
+    # render_item adds one separate paragraph for the author when present.
+    author_paragraphs = 1 if "<dc:creator>" in block else 0
+    return len(PARAGRAPH_RE.findall(body)) - author_paragraphs >= 2
+
+
+def _item_from_block(link: str, when: dt.datetime, block: str) -> dict:
+    """Build minimal source metadata for repairing an older RSS item."""
+    return {
+        "link": link,
+        "title": clean(tag_text(block, "title")) or link,
+        "author": clean(tag_text(block, "dc:creator")),
+        "abstract": html.unescape(tag_text(block, "description")),
+        "date": when,
+    }
 
 
 def load_published(session: requests.Session) -> dict[str, tuple[dt.datetime, str]]:
@@ -245,6 +274,16 @@ def render_item(it: dict, hero: str, paras: list[str], when: dt.datetime) -> str
         f"      <content:encoded><![CDATA[{cdata(body)}]]></content:encoded>\n"
         "    </item>"
     )
+
+
+def build_item(
+    session: requests.Session, it: dict, now: dt.datetime
+) -> tuple[dt.datetime, str, bool]:
+    hero, paras = parse_article(fetch(session, it["link"]))
+    full = len(paras) >= 2
+    when = it["date"] or now
+    block = render_item(it, hero, paras if full else [], when).strip()
+    return when, block, full
 
 
 def build_feed(items: dict[str, tuple[dt.datetime, str]]) -> tuple[str, int]:
@@ -300,16 +339,38 @@ def main() -> int:
     rss = fetch(session, RSS_URL)
     items = parse_rss(rss) if rss else []
     print(f"  rss: {len(items)} items")
+    items_by_link = {it["link"]: it for it in items}
     new = full = 0
+    attempted: set[str] = set()
     for it in items:
         if it["link"] in merged:
             break
-        hero, paras = parse_article(fetch(session, it["link"]))
-        if len(paras) >= 2:
+        when, block, has_full_body = build_item(session, it, now)
+        if has_full_body:
             full += 1
-        when = it["date"] or now
-        merged[it["link"]] = (when, render_item(it, hero, paras, when).strip())
+        merged[it["link"]] = (when, block)
+        attempted.add(it["link"])
         new += 1
+
+    latest = sorted(merged.items(), key=lambda pair: pair[1][0], reverse=True)[:5]
+    missing = [entry for entry in latest if not _block_has_full_body(entry[1][1])]
+    repaired = 0
+    for link, (when, block) in missing:
+        if link in attempted:
+            continue
+        it = items_by_link.get(link) or _item_from_block(link, when, block)
+        repaired_when, repaired_block, has_full_body = build_item(session, it, now)
+        if has_full_body:
+            merged[link] = (repaired_when, repaired_block)
+            repaired += 1
+
+    unresolved = sum(
+        not _block_has_full_body(merged[link][1]) for link, _ in latest
+    )
+    print(
+        f"  body check: latest {len(latest)}, missing {len(missing)}, "
+        f"repaired {repaired}, unresolved {unresolved}"
+    )
     xml, kept = build_feed(merged)
     write_feed(xml, kept)
     print(f"  +{new} new ({full} with full body), feed now {kept}")

@@ -32,7 +32,8 @@ for the indicator charts: a separate manifest dir + release tag from the PDFs.
 
 Output: public/<key>/feed.xml + index.html, each merging its previously
 published copy (ECON_PUBLISHED_BASE_URL) so history survives past the ~12-item
-scan window and a transient scrape failure.
+scan window. Every run also retries incomplete items among the five newest
+entries so a transient scrape failure does not become permanent.
 """
 from __future__ import annotations
 
@@ -330,6 +331,10 @@ def parse_iso(s: str | None) -> dt.datetime | None:
 ITEM_RE = re.compile(r"<item>.*?</item>", re.S)
 FEEDLINK_RE = re.compile(r"<link>([^<]+)</link>")
 PUBDATE_RE = re.compile(r"<pubDate>([^<]+)</pubDate>")
+ITEM_TITLE_RE = re.compile(r"<title>(.*?)</title>", re.S)
+CONTENT_RE = re.compile(
+    r"<content:encoded><!\[CDATA\[(.*?)\]\]></content:encoded>", re.S
+)
 
 
 def _block_link(block: str) -> str | None:
@@ -345,6 +350,29 @@ def _block_date(block: str) -> dt.datetime:
         except (TypeError, ValueError):
             pass
     return dt.datetime(1970, 1, 1, tzinfo=dt.timezone.utc)
+
+
+def _block_has_full_body(block: str) -> bool:
+    """Return whether a stored RSS item contains a rendered article body."""
+    m = CONTENT_RE.search(block)
+    if not m:
+        return False
+    body = m.group(1).strip()
+    return bool(body) and "Read on economist.com</a>" not in body
+
+
+def _item_from_block(link: str, when: dt.datetime, block: str) -> dict:
+    """Build minimal listing metadata for repairing an older RSS item."""
+    m = ITEM_TITLE_RE.search(block)
+    title = html.unescape(m.group(1)).strip() if m else link
+    return {
+        "link": link,
+        "headline": title,
+        "flyTitle": "",
+        "rubric": "",
+        "date": when,
+        "image": "",
+    }
 
 
 def load_published(session: requests.Session, key: str) -> dict[str, tuple[dt.datetime, str]]:
@@ -469,8 +497,10 @@ def run_feed(session: requests.Session, key: str, manifest: list[dict], now: dt.
     page = fetch(session, FEEDS[key]["page"])
     listing = parse_listing(page) if page else []
     print(f"  listing: {len(listing)} articles")
+    listing_by_link = {it["link"]: it for it in listing}
     newest_published = max((when for when, _ in merged.values()), default=None)
     new = 0
+    attempted: set[str] = set()
     for it in listing:
         if it["link"] in merged:
             continue
@@ -483,7 +513,30 @@ def run_feed(session: requests.Session, key: str, manifest: list[dict], now: dt.
             continue
         when, block = build_item(session, it, manifest, now)
         merged[it["link"]] = (when, block)
+        attempted.add(it["link"])
         new += 1
+
+    latest = sorted(merged.items(), key=lambda pair: pair[1][0], reverse=True)[:5]
+    missing = [entry for entry in latest if not _block_has_full_body(entry[1][1])]
+    repaired = 0
+    for link, (when, block) in missing:
+        # New items were already fetched above. Retry an incomplete one on the
+        # next run, when a just-published detail page has had time to populate.
+        if link in attempted:
+            continue
+        it = listing_by_link.get(link) or _item_from_block(link, when, block)
+        repaired_when, repaired_block = build_item(session, it, manifest, now)
+        if _block_has_full_body(repaired_block):
+            merged[link] = (repaired_when, repaired_block)
+            repaired += 1
+
+    unresolved = sum(
+        not _block_has_full_body(merged[link][1]) for link, _ in latest
+    )
+    print(
+        f"  body check: latest {len(latest)}, missing {len(missing)}, "
+        f"repaired {repaired}, unresolved {unresolved}"
+    )
     xml, kept = build_feed(key, merged)
     write_feed(key, xml, kept)
     print(f"  {key}: +{new} new, feed now {kept}")
