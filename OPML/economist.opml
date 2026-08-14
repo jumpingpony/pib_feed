@@ -6,7 +6,6 @@
   <body>
       <outline text="The Economist (unofficial, full-text)" title="The Economist (unofficial, full-text)">
         <outline type="rss" text="Economic &amp; financial indicators - Economist" title="Economic &amp; financial indicators - Economist" xmlUrl="https://nappingcats.github.io/pib_feed/economist-indicators/feed.xml" htmlUrl="https://www.economist.com/topics/economic-and-financial-indicators"/>
-        <outline type="rss" text="Schools brief - Economist" title="Schools brief - Economist" xmlUrl="https://nappingcats.github.io/pib_feed/economist-schools-brief/feed.xml" htmlUrl="https://www.economist.com/schools-brief"/>
         <outline type="rss" text="Finance &amp; economics - Economist" title="Finance &amp; economics - Economist" xmlUrl="https://nappingcats.github.io/pib_feed/economist-finance-and-economics/feed.xml" htmlUrl="https://www.economist.com/finance-and-economics"/>
         <outline type="rss" text="Business - Economist" title="Business - Economist" xmlUrl="https://nappingcats.github.io/pib_feed/economist-business/feed.xml" htmlUrl="https://www.economist.com/topics/business"/>
         <outline type="rss" text="By Invitation - Economist" title="By Invitation - Economist" xmlUrl="https://nappingcats.github.io/pib_feed/economist-by-invitation/feed.xml" htmlUrl="https://www.economist.com/topics/by-invitation"/>

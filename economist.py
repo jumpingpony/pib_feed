@@ -18,9 +18,6 @@ pages expose `content.body`, a list of typed components (PARAGRAPH with ready
   economist-indicators    /topics/economic-and-financial-indicators — the
                           weekly "Economic data, commodities and markets"
                           pages, which are essentially a set of chart images.
-  economist-schools-brief /schools-brief — the explainer essays (and, lately,
-                          interactive "primers" which carry no __NEXT_DATA__
-                          body; those degrade to teaser image + rubric + link).
   economist-podcasts     /podcasts — every listed episode, with its direct MP3
                           URL as an RSS enclosure and the full transcript in the
                           item body. "Editor's Picks" narrated articles expose
@@ -89,14 +86,6 @@ FEEDS = {
         "max_items": 120,
         "archive_images": True,
     },
-    "economist-schools-brief": {
-        "title": "Schools brief - Economist",
-        "desc": "Unofficial full-text feed of The Economist's Schools brief explainers.",
-        "page": f"{BASE}/schools-brief",
-        "html": f"{BASE}/schools-brief",
-        "max_items": 120,
-        "archive_images": True,
-    },
     "economist-finance-and-economics": {
         "title": "Finance & economics - Economist",
         "desc": "Unofficial full-text feed of The Economist's Finance & economics section.",
@@ -127,6 +116,7 @@ FEEDS = {
         "with direct MP3 enclosures.",
         "page": f"{BASE}/podcasts",
         "html": f"{BASE}/podcasts",
+        "image": "https://assets.pippa.io/shows/62e28cad7ca7a10012e46a32/economist-show-cover.png",
         "max_items": 120,
         "archive_images": True,
         "kind": "podcast",
@@ -372,6 +362,7 @@ CONTENT_RE = re.compile(
     r"<content:encoded><!\[CDATA\[(.*?)\]\]></content:encoded>", re.S
 )
 AUDIO_ENCLOSURE_RE = re.compile(r"<enclosure\b[^>]*\btype=\"audio/", re.I)
+ITUNES_IMAGE_RE = re.compile(r"<itunes:image\b[^>]*\bhref=", re.I)
 TRANSCRIPT_MARKER = "<h2>Transcript</h2>"
 
 
@@ -402,7 +393,11 @@ def _block_has_full_body(block: str) -> bool:
 def _block_complete(key: str, block: str) -> bool:
     """Return whether an item has all source-specific payloads worth retrying."""
     if FEEDS[key].get("kind") == "podcast":
-        return bool(AUDIO_ENCLOSURE_RE.search(block)) and TRANSCRIPT_MARKER in block
+        return (
+            bool(AUDIO_ENCLOSURE_RE.search(block))
+            and TRANSCRIPT_MARKER in block
+            and bool(ITUNES_IMAGE_RE.search(block))
+        )
     return _block_has_full_body(block)
 
 
@@ -445,6 +440,10 @@ def render_item(
     when: dt.datetime,
     enclosure: tuple[str, int, str] | None = None,
     duration: str = "",
+    image: str = "",
+    author: str = "",
+    category: str = "",
+    itunes_title: str = "",
 ) -> str:
     if not summary:
         summary = clean(body_html)[:500]
@@ -460,6 +459,31 @@ def render_item(
         if duration
         else ""
     )
+    image_xml = (
+        f'      <itunes:image href="{escape(image)}" />\n'
+        if image
+        else ""
+    )
+    author_xml = (
+        f"      <itunes:author>{escape(author)}</itunes:author>\n"
+        if author
+        else ""
+    )
+    category_xml = (
+        f"      <category>{escape(category)}</category>\n"
+        if category
+        else ""
+    )
+    itunes_title_xml = (
+        f"      <itunes:title>{escape(xml_safe(itunes_title))}</itunes:title>\n"
+        if itunes_title
+        else ""
+    )
+    explicit_xml = (
+        "      <itunes:explicit>no</itunes:explicit>\n"
+        if enclosure
+        else ""
+    )
     return (
         "    <item>\n"
         f"      <title>{escape(xml_safe(title))}</title>\n"
@@ -468,6 +492,11 @@ def render_item(
         f"      <pubDate>{format_datetime(when)}</pubDate>\n"
         f"{enclosure_xml}"
         f"{duration_xml}"
+        f"{image_xml}"
+        f"{author_xml}"
+        f"{category_xml}"
+        f"{itunes_title_xml}"
+        f"{explicit_xml}"
         f"      <description>{escape(xml_safe(summary))}</description>\n"
         f"      <content:encoded><![CDATA[{cdata(body_html)}]]></content:encoded>\n"
         "    </item>"
@@ -485,11 +514,44 @@ def build_feed(key: str, items: dict[str, tuple[dt.datetime, str]]) -> tuple[str
         if self_url
         else ""
     )
+    is_podcast = feed.get("kind") == "podcast"
     itunes = (
         ' xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"'
-        if feed.get("kind") == "podcast"
+        if is_podcast
         else ""
     )
+    channel_image = feed.get("image") or ""
+    image_xml = ""
+    if channel_image:
+        image_xml = (
+            f"    <image>\n"
+            f"      <url>{escape(channel_image)}</url>\n"
+            f"      <title>{escape(feed['title'])}</title>\n"
+            f"      <link>{escape(feed['html'])}</link>\n"
+            f"    </image>\n"
+        )
+    itunes_channel = ""
+    if is_podcast:
+        cover_href = channel_image or "https://assets.pippa.io/shows/62e28cad7ca7a10012e46a32/economist-show-cover.png"
+        itunes_channel = (
+            "    <itunes:author>The Economist</itunes:author>\n"
+            f"    <itunes:summary>{escape(feed['desc'])}</itunes:summary>\n"
+            "    <itunes:type>episodic</itunes:type>\n"
+            "    <itunes:owner>\n"
+            "      <itunes:name>The Economist</itunes:name>\n"
+            "    </itunes:owner>\n"
+            f'    <itunes:image href="{escape(cover_href)}" />\n'
+            '    <itunes:category text="News" />\n'
+            "    <itunes:explicit>no</itunes:explicit>\n"
+        )
+        if not image_xml:
+            image_xml = (
+                f"    <image>\n"
+                f"      <url>{escape(cover_href)}</url>\n"
+                f"      <title>{escape(feed['title'])}</title>\n"
+                f"      <link>{escape(feed['html'])}</link>\n"
+                f"    </image>\n"
+            )
     xml = (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         '<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/" '
@@ -500,6 +562,8 @@ def build_feed(key: str, items: dict[str, tuple[dt.datetime, str]]) -> tuple[str
         f"    <description>{escape(feed['desc'])}</description>\n"
         "    <language>en</language>\n"
         f"    <lastBuildDate>{now}</lastBuildDate>\n"
+        f"{image_xml}"
+        f"{itunes_channel}"
         f"{atom}"
         + "\n".join(blocks)
         + "\n  </channel>\n</rss>\n"
@@ -670,8 +734,26 @@ def build_podcast_item(
     if audio_url:
         length, media_type = probe_audio(session, audio_url)
         enclosure = (audio_url, length, media_type)
-    title = clean(podcast.get("title") or content.get("headline") or it["headline"])
+    raw_title = clean(podcast.get("title") or content.get("headline") or it["headline"])
     summary = rubric or transcript_summary
+
+    image_url = (podcast.get("imageUrl") or "").strip()
+    if not image_url:
+        show_img = ((podcast.get("show") or {}).get("imageUrl") or "").strip()
+        if show_img:
+            image_url = archive_image(show_img, manifest)
+    if not image_url:
+        lead_img = ((content.get("leadComponent") or {}).get("url") or it.get("image") or "").strip()
+        if lead_img:
+            image_url = archive_image(lead_img, manifest)
+    if not image_url:
+        image_url = FEEDS["economist-podcasts"].get("image", "")
+
+    if show and not raw_title.startswith(f"[{show}]"):
+        title = f"[{show}] {raw_title}"
+    else:
+        title = raw_title
+
     block = render_item(
         it["link"],
         title,
@@ -680,6 +762,10 @@ def build_podcast_item(
         when,
         enclosure=enclosure,
         duration=duration,
+        image=image_url,
+        author=show or "The Economist",
+        category=show,
+        itunes_title=raw_title,
     )
     return when, block.strip()
 
@@ -748,7 +834,10 @@ def run_feed(session: requests.Session, key: str, manifest: list[dict], now: dt.
         new += 1
 
     latest = sorted(merged.items(), key=lambda pair: pair[1][0], reverse=True)[:5]
-    missing = [entry for entry in latest if not _block_complete(key, entry[1][1])]
+    if FEEDS[key].get("kind") == "podcast":
+        missing = [entry for entry in merged.items() if not _block_complete(key, entry[1][1])]
+    else:
+        missing = [entry for entry in latest if not _block_complete(key, entry[1][1])]
     repaired = 0
     for link, (when, block) in missing:
         # New items were already fetched above. Retry an incomplete one on the

@@ -724,7 +724,6 @@ Full-text RSS feeds for [The Economist](https://www.economist.com), built by
 | Business | the weekly Business section articles | [feed.xml](https://nappingcats.github.io/pib_feed/economist-business/feed.xml) |
 | By Invitation | guest commentary from outside contributors | [feed.xml](https://nappingcats.github.io/pib_feed/economist-by-invitation/feed.xml) |
 | Finance & economics | the weekly Finance & economics articles | [feed.xml](https://nappingcats.github.io/pib_feed/economist-finance-and-economics/feed.xml) |
-| Schools brief | the explainer essays / primers | [feed.xml](https://nappingcats.github.io/pib_feed/economist-schools-brief/feed.xml) |
 | Economic & financial indicators | the weekly economic-data & chart pages | [feed.xml](https://nappingcats.github.io/pib_feed/economist-indicators/feed.xml) |
 | Podcasts | direct MP3 enclosures and complete transcripts | [feed.xml](https://nappingcats.github.io/pib_feed/economist-podcasts/feed.xml) |
 
@@ -755,10 +754,12 @@ published copy so history survives past the ~12-item scan window. Every run
 also retries incomplete items among the five newest entries and replaces a
 fallback once the full body becomes available.
 
-Podcast detail payloads expose the direct MP3 under `content.podcast.audio.url`
-and speaker-and-timestamp transcript components under
+Podcast detail payloads expose the direct MP3 under `content.podcast.audio.url`,
+official square cover artwork under `content.podcast.imageUrl`, and speaker-and-timestamp transcript components under
 `content.podcast.transcript.body`. The feed publishes the MP3 as an RSS
-`enclosure` and renders every transcript component in `content:encoded`.
+`enclosure`, embeds the show-specific 1:1 square cover art (`1400×1400` / `3000×3000` standard)
+in `<itunes:image>`, prefixes titles with `[Show Name]` for rapid skimming, tags
+`<category>` and `<itunes:author>`, and renders every transcript component in `content:encoded`.
 Narrated Editor's Picks episodes have no separate transcript; their show notes
 link to the source article, whose complete Liskov-exposed body is used instead.
 
