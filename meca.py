@@ -271,10 +271,28 @@ FEEDS = [
 ]
 
 
-def item_pdf_url(art: dict) -> str | None:
-    if art["pdf"] and ARCHIVE_MODE == "archive" and ARCHIVE_BASE_URL and art["archival_name"]:
-        return f"{ARCHIVE_BASE_URL}/{art['archival_name']}"
-    return art["pdf"]
+def archive_base_for(key: str, art: dict) -> str:
+    if not ARCHIVE_BASE_URL:
+        return ""
+    year = art["date"].year if art.get("date") else dt.datetime.now(IST).year
+    base = ARCHIVE_BASE_URL
+    if "{feed}" in base:
+        base = base.format(feed=key, year=year)
+    elif "{year}" in base:
+        base = base.format(year=year)
+    return base
+
+
+def archive_tag_for(key: str, art: dict) -> str:
+    base = archive_base_for(key, art)
+    return base.rsplit("/", 1)[-1] if base else "pdf-archive"
+
+
+def item_pdf_url(key: str, art: dict) -> str | None:
+    if art.get("pdf") and ARCHIVE_MODE == "archive" and ARCHIVE_BASE_URL and art.get("archival_name"):
+        base = archive_base_for(key, art)
+        return f"{base}/{art['archival_name']}"
+    return art.get("pdf")
 
 
 # --- feed I/O -----------------------------------------------------------------
@@ -308,7 +326,7 @@ def load_published(session: requests.Session, key: str) -> dict[int, str]:
 
 def render_item(key: str, art: dict) -> str:
     pub = art["date"] or dt.datetime.now(IST)
-    pdf = item_pdf_url(art)
+    pdf = item_pdf_url(key, art)
     # guid must be stable across the changing-link cases, so key it by id
     guid = f"urn:meca:{key}:{art['id']}"
     if pdf:
@@ -401,7 +419,11 @@ def run_feed(session: requests.Session, feed: dict) -> int:
         existing[art["id"]] = render_item(feed["key"], art).strip()
         kept_arts += 1
         if ARCHIVE_MODE == "archive" and art["pdf"] and art["archival_name"]:
-            manifest.append({"name": art["archival_name"], "url": art["pdf"]})
+            manifest.append({
+                "name": art["archival_name"],
+                "url": art["pdf"],
+                "tag": archive_tag_for(feed["key"], art),
+            })
     if ARCHIVE_MODE == "archive":
         write_manifest(feed["key"], manifest)
     xml = build_feed(feed, existing)

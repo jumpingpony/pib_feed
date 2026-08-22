@@ -204,9 +204,27 @@ def parse_doc(
     }
 
 
-def item_pdf_url(art: dict) -> str:
+def archive_base_for(feed: dict, art: dict) -> str:
+    if not ARCHIVE_BASE_URL:
+        return ""
+    year = art.get("year") or dt.datetime.now(IST).year
+    base = ARCHIVE_BASE_URL
+    if "{feed}" in base:
+        base = base.format(feed=feed["key"], year=year)
+    elif "{year}" in base:
+        base = base.format(year=year)
+    return base
+
+
+def archive_tag_for(feed: dict, art: dict) -> str:
+    base = archive_base_for(feed, art)
+    return base.rsplit("/", 1)[-1] if base else "pdf-archive"
+
+
+def item_pdf_url(feed: dict, art: dict) -> str:
     if ARCHIVE_MODE == "archive" and ARCHIVE_BASE_URL:
-        return f"{ARCHIVE_BASE_URL}/{art['archival_name']}"
+        base = archive_base_for(feed, art)
+        return f"{base}/{art['archival_name']}"
     return art["pdf"]
 
 
@@ -235,9 +253,9 @@ def load_published(session: requests.Session, key: str) -> dict[int, str]:
     return items
 
 
-def render_item(art: dict) -> str:
+def render_item(feed: dict, art: dict) -> str:
     pub = art["date"] or dt.datetime.now(IST)
-    pdf = item_pdf_url(art)
+    pdf = item_pdf_url(feed, art)
     display = f"[{art['year']} | {art['title']}]"
     body = (
         f'<p><a href="{escape(pdf)}">{escape(art["title"])} (PDF)</a></p>\n'
@@ -362,10 +380,14 @@ def run_feed(session: requests.Session, feed: dict) -> int:
                 continue
             if (art["year"] or now_year) < ARCHIVE_MIN_YEAR:
                 continue
-            existing[art["id"]] = render_item(art).strip()
+            existing[art["id"]] = render_item(feed, art).strip()
             found += 1
             if ARCHIVE_MODE == "archive":
-                manifest.append({"name": art["archival_name"], "url": art["pdf"]})
+                manifest.append({
+                    "name": art["archival_name"],
+                    "url": art["pdf"],
+                    "tag": archive_tag_for(feed, art),
+                })
     if ARCHIVE_MODE == "archive":
         write_manifest(feed["key"], manifest)
     xml = build_feed(feed, existing)

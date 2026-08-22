@@ -233,6 +233,18 @@ def image_basename(url: str) -> str:
     return name
 
 
+def archive_base_url() -> str:
+    if not ARCHIVE_BASE_URL:
+        return ""
+    year = dt.datetime.now(dt.timezone.utc).year
+    return ARCHIVE_BASE_URL.format(year=year) if "{year}" in ARCHIVE_BASE_URL else ARCHIVE_BASE_URL
+
+
+def archive_tag() -> str:
+    base = archive_base_url()
+    return base.rsplit("/", 1)[-1] if base else "image-archive"
+
+
 def archive_image(url: str, manifest: list[dict]) -> str:
     """Rewrite a content-asset image to its archived release URL and record it.
 
@@ -248,9 +260,11 @@ def archive_image(url: str, manifest: list[dict]) -> str:
     name = image_basename(canon)
     if not name:
         return canon
+    base = archive_base_url()
+    tag = archive_tag()
     if not any(e["name"] == name for e in manifest):
-        manifest.append({"name": name, "url": canon})
-    return f"{ARCHIVE_BASE_URL}/{name}"
+        manifest.append({"name": name, "url": canon, "tag": tag})
+    return f"{base}/{name}"
 
 
 # --- body rendering -----------------------------------------------------------

@@ -337,10 +337,23 @@ def load_published(session: requests.Session, key: str) -> dict[str, tuple[str, 
     return items
 
 
+def archive_base_for(art: dict) -> str:
+    if not ARCHIVE_BASE_URL:
+        return ""
+    year = art["date"].year if art.get("date") else dt.datetime.now(IST).year
+    return ARCHIVE_BASE_URL.format(year=year) if "{year}" in ARCHIVE_BASE_URL else ARCHIVE_BASE_URL
+
+
+def archive_tag_for(art: dict) -> str:
+    base = archive_base_for(art)
+    return base.rsplit("/", 1)[-1] if base else "pdf-archive"
+
+
 def item_link(art: dict) -> str:
     """Durable feed link: the release asset in archive mode, else the source PDF."""
     if ARCHIVE_MODE == "archive" and ARCHIVE_BASE_URL:
-        return f"{ARCHIVE_BASE_URL}/{archival_name_of(art)}"
+        base = archive_base_for(art)
+        return f"{base}/{archival_name_of(art)}"
     return art["pdf"]
 
 
@@ -445,7 +458,7 @@ def run_feed(session: requests.Session, feed: dict) -> int:
             name = archival_name_of(art)
             if name not in seen_names:
                 seen_names.add(name)
-                manifest.append({"name": name, "url": art["pdf"]})
+                manifest.append({"name": name, "url": art["pdf"], "tag": archive_tag_for(art)})
         if art["pdf"] in merged:
             continue  # already published; item already points at the durable asset
         merged[art["pdf"]] = (render_item(art).strip(), art["date"] or dt.datetime.now(IST))

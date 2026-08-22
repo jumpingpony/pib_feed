@@ -127,45 +127,61 @@ def signed_pdf_url(session: requests.Session, feed: dict, issue_id: int) -> str 
     return url.strip() if url else None
 
 
-def load_archive_assets() -> set[str] | None:
-    """List current release assets, or return None when verification is unavailable."""
+def load_archive_assets(tags: list[str] | None = None) -> set[str] | None:
+    """List assets across target releases and legacy pdf-archive."""
     if ARCHIVE_MODE != "archive" or not ARCHIVE_BASE_URL:
         return None
-    match = re.fullmatch(
-        r"https://github\.com/([^/]+/[^/]+)/releases/download/([^/]+)",
-        ARCHIVE_BASE_URL,
-    )
-    if not match:
-        print("  cannot identify archive repository and tag", file=sys.stderr)
+    repo_match = re.search(r"github\.com/([^/]+/[^/]+)/releases/download", ARCHIVE_BASE_URL)
+    if not repo_match:
+        print("  cannot identify archive repository from ARCHIVE_BASE_URL", file=sys.stderr)
         return None
-    repo, tag = match.groups()
-    try:
-        result = subprocess.run(
-            [
-                "gh",
-                "release",
-                "view",
-                tag,
-                "--repo",
-                repo,
-                "--json",
-                "assets",
-                "--jq",
-                ".assets[].name",
-            ],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except OSError as e:
-        print(f"  cannot list archive assets: {e}", file=sys.stderr)
-        return None
-    if result.returncode != 0:
-        print(f"  cannot list archive assets: {result.stderr.strip()}", file=sys.stderr)
-        return None
-    assets = {line.strip() for line in result.stdout.splitlines() if line.strip()}
-    print(f"  archive inventory: {len(assets)} assets")
-    return assets
+    repo = repo_match.group(1)
+
+    if tags is None:
+        this_year = dt.datetime.now(IST).year
+        years = [this_year, this_year - 1]
+        tags_to_check = {"pdf-archive"}
+        for f in FEEDS:
+            for y in years:
+                base = ARCHIVE_BASE_URL
+                if "{feed}" in base:
+                    base = base.format(feed=f["key"], year=y)
+                elif "{year}" in base:
+                    base = base.format(year=y)
+                tag = base.rsplit("/", 1)[-1]
+                if tag:
+                    tags_to_check.add(tag)
+    else:
+        tags_to_check = set(tags)
+
+    all_assets: set[str] = set()
+    for tag in tags_to_check:
+        try:
+            result = subprocess.run(
+                [
+                    "gh",
+                    "release",
+                    "view",
+                    tag,
+                    "--repo",
+                    repo,
+                    "--json",
+                    "assets",
+                    "--jq",
+                    ".assets[].name",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if result.returncode == 0:
+                assets = {line.strip() for line in result.stdout.splitlines() if line.strip()}
+                all_assets.update(assets)
+        except OSError:
+            pass
+
+    print(f"  archive inventory: {len(all_assets)} assets across {len(tags_to_check)} checked tags")
+    return all_assets
 
 
 def collect(session: requests.Session, feed: dict) -> list[dict]:
@@ -200,10 +216,28 @@ def collect(session: requests.Session, feed: dict) -> list[dict]:
     return out
 
 
-def item_pdf_url(art: dict) -> str | None:
+def archive_base_for(feed: dict, art: dict) -> str:
+    if not ARCHIVE_BASE_URL:
+        return ""
+    year = art["date"].year if art.get("date") else dt.datetime.now(IST).year
+    base = ARCHIVE_BASE_URL
+    if "{feed}" in base:
+        base = base.format(feed=feed["key"], year=year)
+    elif "{year}" in base:
+        base = base.format(year=year)
+    return base
+
+
+def archive_tag_for(feed: dict, art: dict) -> str:
+    base = archive_base_for(feed, art)
+    return base.rsplit("/", 1)[-1] if base else "pdf-archive"
+
+
+def item_pdf_url(feed: dict, art: dict) -> str | None:
     """Durable feed link for the PDF: the release asset in archive mode."""
     if ARCHIVE_MODE == "archive" and ARCHIVE_BASE_URL and art["archival_name"]:
-        return f"{ARCHIVE_BASE_URL}/{art['archival_name']}"
+        base = archive_base_for(feed, art)
+        return f"{base}/{art['archival_name']}"
     return None
 
 
@@ -244,10 +278,10 @@ def load_published(session: requests.Session, key: str) -> dict[int, str]:
     return items
 
 
-def render_item(art: dict) -> str:
+def render_item(feed: dict, art: dict) -> str:
     pub = art["date"] or dt.datetime.now(IST)
     guid = f"urn:ie-epaper:{art['id']}"
-    pdf = item_pdf_url(art)
+    pdf = item_pdf_url(feed, art)
     if pdf:
         body = (
             f'<p><a href="{escape(pdf)}">{escape(art["title"])} (PDF)</a></p>\n'
@@ -336,12 +370,16 @@ def run_feed(
         if ARCHIVE_MODE == "archive" and (not published or missing_asset):
             art["pdf"] = signed_pdf_url(session, feed, art["id"])
             if art["pdf"]:
-                manifest.append({"name": art["archival_name"], "url": art["pdf"]})
+                manifest.append({
+                    "name": art["archival_name"],
+                    "url": art["pdf"],
+                    "tag": archive_tag_for(feed, art),
+                })
                 if published:
                     repairs += 1
         if published:
             continue
-        existing[art["id"]] = render_item(art).strip()
+        existing[art["id"]] = render_item(feed, art).strip()
         new += 1
     if ARCHIVE_MODE == "archive":
         write_manifest(feed["key"], manifest)

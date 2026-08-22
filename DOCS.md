@@ -188,27 +188,31 @@ NextIAS). Each item's body links the PDF; recent years' PDFs are also **archived
 
 All feeds merge their previously-published copy to retain history.
 
-## PDF archival (GitHub Releases)
+## PDF Archival (GitHub Releases Partitioning)
 
 The PDFs are large (Vision ~25 MB/doc, NextIAS ~45 MB/magazine), so committing
 them into the repo is a bad fit: a **GitHub Pages published site is capped at
 1 GB** and repos are recommended under 1 GB, and git history would keep every
 version forever. Instead they are mirrored as **GitHub Release assets** (up to
-2 GB/file, not counted against repo or Pages size, no history bloat):
+2 GB/file, not counted against repo or Pages size, no history bloat).
 
-1. In archive mode (`*_ARCHIVE_MODE=archive`), the feed scripts write
-   `archive/<key>.json` manifests of `{name, url}` for each archivable PDF and
-   point feed items at `…/releases/download/pdf-archive/<name>`.
-2. `archive_pdfs.py` reads the manifests, and for any asset not already on the
-   `pdf-archive` release, downloads the source PDF and uploads it (deleting the
-   temp file after). It is idempotent — already-archived PDFs are skipped.
+To keep asset counts per release safely below GitHub's limits (~1,000 items per release),
+releases are partitioned cleanly:
+- **MyGov publications**: Merged per year under `mygov-{year}` (e.g. `mygov-2024`, `mygov-2025`, `mygov-2026`).
+- **NITI Aayog publications**: Merged per year under `niti-{year}` (e.g. `niti-2023`, `niti-2024`, `niti-2025`, `niti-2026`).
+- **Newspapers / E-papers**: Partitioned per-feed per-year under `indianexpress-delhi-{year}` and `upsc-essentials-{year}`.
+- **Vision IAS**: Partitioned per-feed per-year under `visionias-pt365-{year}` and `visionias-mains365-{year}`.
+- **Made Easy & NextIAS**: Partitioned per-feed per-year under `made-easy-ca-{year}` and `nextias-magazine-{year}`.
+- **Economist Images**: Partitioned under `economist-images-{year}`.
+- **Legacy Releases**: `pdf-archive` and `image-archive` remain permanently on GitHub with all original assets intact, guaranteeing that legacy direct links never 404 or break.
+
+1. In archive mode (`*_ARCHIVE_MODE=archive`), feed scripts write `archive/<key>.json` manifests of `{name, url, tag}` and point feed items at the release URL.
+2. `archive_pdfs.py` reads the manifests, groups uploads by target `tag`, ensures each release exists, and uploads only missing assets.
+3. Reference verification checks all `/releases/download/<tag>/<filename>` links across published feeds against GitHub release inventories.
 
 Only PDFs published in **`ARCHIVE_MIN_YEAR` or later** are fed and archived, which
 bounds the archive; future years are included automatically. The in-code default
-is **2025 for Vision IAS** and **2024 for Made Easy / NextIAS**. PDFs are renamed
-for archival with the year up front, e.g.
-`visionias_pt-365_2026_species-in-news_13707.pdf`,
-`nextias_monthly-current-affairs-may-2026.pdf`.
+is **2025 for Vision IAS** and **2024 for Made Easy / NextIAS**.
 
 ## Configuration (env vars)
 
@@ -216,11 +220,15 @@ for archival with the year up front, e.g.
 |-----|---------|---------|
 | `ARCHIVE_MIN_YEAR` | `2025` Vision / `2024` Made Easy·NextIAS | Feed/archive only items from this year onward |
 | `VIS_ARCHIVE_MODE` / `MECA_ARCHIVE_MODE` | `link` | `link` (item → source PDF) or `archive` (item → release asset + write manifest) |
-| `VIS_ARCHIVE_BASE_URL` / `MECA_ARCHIVE_BASE_URL` | – | Release download base, e.g. `https://github.com/<owner>/<repo>/releases/download/pdf-archive` |
+| `VIS_ARCHIVE_BASE_URL` / `MECA_ARCHIVE_BASE_URL` | – | Release download base with `{feed}` and `{year}` templating, e.g. `https://github.com/<owner>/<repo>/releases/download/{feed}-{year}` |
+| `MYGOV_ARCHIVE_BASE_URL` | – | Release download base with `{year}`, e.g. `https://github.com/<owner>/<repo>/releases/download/mygov-{year}` |
+| `NITI_ARCHIVE_BASE_URL` | – | Release download base with `{year}`, e.g. `https://github.com/<owner>/<repo>/releases/download/niti-{year}` |
+| `IE_EPAPER_ARCHIVE_BASE_URL` | – | Release download base with `{feed}` and `{year}`, e.g. `https://github.com/<owner>/<repo>/releases/download/{feed}-{year}` |
+| `ECON_ARCHIVE_BASE_URL` | – | Release download base with `{year}`, e.g. `https://github.com/<owner>/<repo>/releases/download/economist-images-{year}` |
 | `VIS_PUBLISHED_BASE_URL` / `MECA_PUBLISHED_BASE_URL` | – | Live-site base for history-merge |
 | `VIS_MAX_FETCH` | `80` | Vision document window per feed |
 | `ARCHIVE_MANIFEST_DIR` | `archive` | Where the manifests are written |
-| `ARCHIVE_RELEASE_TAG` | `pdf-archive` | Release tag the assets live under |
+| `ARCHIVE_RELEASE_TAG` | `pdf-archive` | Default release tag if unannotated |
 | `ARCHIVE_REFERENCE_DIR` | `public` | Generated feeds whose archive links are checked against release assets |
 | `ARCHIVE_VERIFY_DAYS` | `1` | Number of recent publication days whose feed archive links are verified |
 
@@ -231,8 +239,8 @@ pip install -r requirements.txt
 # feeds only (link to source PDFs, no archival):
 VIS_MAX_FETCH=15 python visioniaspt365.py
 python meca.py
-# with archival (needs gh authenticated; uploads to the pdf-archive release):
-VIS_ARCHIVE_MODE=archive VIS_ARCHIVE_BASE_URL=https://github.com/<owner>/<repo>/releases/download/pdf-archive python visioniaspt365.py
+# with archival (uploads to partitioned releases via archive_pdfs.py):
+VIS_ARCHIVE_MODE=archive VIS_ARCHIVE_BASE_URL=https://github.com/<owner>/<repo>/releases/download/{feed}-{year} python visioniaspt365.py
 python archive_pdfs.py
 ```
 
@@ -527,7 +535,7 @@ asset is missing. The release inventory is read once with `gh`; CI supplies its
 | Var | Default | Meaning |
 | --- | --- | --- |
 | `IE_EPAPER_ARCHIVE_MODE` | `link` | `link` (item → reader page) or `archive` (item → release asset + write manifest) |
-| `IE_EPAPER_ARCHIVE_BASE_URL` | – | Release download base, e.g. `https://github.com/<owner>/<repo>/releases/download/pdf-archive` |
+| `IE_EPAPER_ARCHIVE_BASE_URL` | – | Release download base with `{feed}` and `{year}`, e.g. `https://github.com/<owner>/<repo>/releases/download/{feed}-{year}` |
 | `IE_EPAPER_PUBLISHED_BASE_URL` | – | Live-site base for history-merge |
 | `ARCHIVE_MIN_DATE` | `2026-01-01` | Fallback earliest issue date; per-feed `min_date` in `FEEDS` overrides (UPSC Jan 2026, Delhi/EYE Jun 2026) |
 
@@ -690,7 +698,7 @@ Item identity (and dedup vs. the published feed) is the stable
 | --- | --- | --- |
 | `NITI_PUBLISHED_BASE_URL` | – | Live-site base for history-merge |
 | `NITI_ARCHIVE_MODE` | `link` | `archive` mirrors PDFs to the release and links the asset |
-| `NITI_ARCHIVE_BASE_URL` | – | Release download base for archived PDFs |
+| `NITI_ARCHIVE_BASE_URL` | – | Release download base with `{year}`, e.g. `https://github.com/<owner>/<repo>/releases/download/niti-{year}` |
 | `NITI_MIN_DATE` | `2024-01-01` | Fallback earliest date (per-feed `min_date` overrides) |
 | `NITI_MAX_PAGES` | `40` | Safety cap on listing pages walked per feed |
 
@@ -698,9 +706,9 @@ Item identity (and dedup vs. the published feed) is the stable
 # feeds only (link to source PDFs, no archival):
 python niti.py
 
-# with archival (needs gh authenticated via archive_pdfs.py; uploads to pdf-archive):
+# with archival (needs gh authenticated via archive_pdfs.py; uploads to niti-{year}):
 NITI_ARCHIVE_MODE=archive \
-NITI_ARCHIVE_BASE_URL=https://github.com/<owner>/<repo>/releases/download/pdf-archive \
+NITI_ARCHIVE_BASE_URL=https://github.com/<owner>/<repo>/releases/download/niti-{year} \
 python niti.py && python archive_pdfs.py
 ```
 
@@ -769,7 +777,7 @@ link to the source article, whose complete Liskov-exposed body is used instead.
 |-----|---------|---------|
 | `ECON_PUBLISHED_BASE_URL` | – | Live-site base for history-merge |
 | `ECON_ARCHIVE_MODE` | `link` | `archive` rewrites body images to the release copy |
-| `ECON_ARCHIVE_BASE_URL` | – | Release base URL images point at in archive mode |
+| `ECON_ARCHIVE_BASE_URL` | – | Release base URL with `{year}` images point at in archive mode, e.g. `https://github.com/<owner>/<repo>/releases/download/economist-images-{year}` |
 | `ECON_ARCHIVE_MANIFEST_DIR` | `image_archive` | Where image manifests are written |
 | `ECON_OUT_DIR` | `public` | Output directory |
 

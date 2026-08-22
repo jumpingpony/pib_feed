@@ -169,9 +169,22 @@ def collect(
     return list(items.values())
 
 
+def archive_base_for(art: dict) -> str:
+    if not ARCHIVE_BASE_URL:
+        return ""
+    year = art["date"].year if art.get("date") else dt.datetime.now(IST).year
+    return ARCHIVE_BASE_URL.format(year=year) if "{year}" in ARCHIVE_BASE_URL else ARCHIVE_BASE_URL
+
+
+def archive_tag_for(art: dict) -> str:
+    base = archive_base_for(art)
+    return base.rsplit("/", 1)[-1] if base else "pdf-archive"
+
+
 def item_pdf_url(key: str, art: dict) -> str:
     if ARCHIVE_MODE == "archive" and ARCHIVE_BASE_URL:
-        return f"{ARCHIVE_BASE_URL}/{archival_name(key, art)}"
+        base = archive_base_for(art)
+        return f"{base}/{archival_name(key, art)}"
     return art["pdf"]
 
 
@@ -285,7 +298,8 @@ def run_feed(session: requests.Session, feed: dict) -> int:
         existing[art["id"]] = render_item(feed["key"], art).strip()
         kept += 1
         if ARCHIVE_MODE == "archive":
-            manifest.append({"name": archival_name(feed["key"], art), "url": art["pdf"]})
+            name = archival_name(feed["key"], art)
+            manifest.append({"name": name, "url": art["pdf"], "tag": archive_tag_for(art)})
     if ARCHIVE_MODE == "archive":
         write_manifest(feed["key"], manifest)
     xml = build_feed(feed, existing)
