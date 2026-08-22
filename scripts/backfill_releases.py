@@ -97,6 +97,12 @@ def classify_asset(name: str, source_release: str = LEGACY_PDF_TAG) -> Optional[
         return f"nextias-magazine-{m.group(1)}"
 
     # MyGov (merged across all MyGov publications per year)
+    # 1. Standard format: mygov_{src}_{YYYY-MM-DD}_{slug}.pdf
+    m = re.search(r"mygov_.*?_(\d{4})-\d{2}-\d{2}", name)
+    if m:
+        return f"mygov-{m.group(1)}"
+
+    # 2. Legacy timestamp format: mygov_..._{10-digit-timestamp}_...
     m = re.search(r"mygov_.*_(\d{10})_", name)
     if m:
         try:
@@ -104,9 +110,6 @@ def classify_asset(name: str, source_release: str = LEGACY_PDF_TAG) -> Optional[
             return f"mygov-{year}"
         except (ValueError, OSError):
             pass
-    m = re.search(r"mygov_.*(\d{4})", name)
-    if m:
-        return f"mygov-{m.group(1)}"
 
     # NITI Aayog (merged across all NITI publications per year)
     m = re.search(r"niti_(\d{4})", name)
@@ -206,14 +209,14 @@ def process_release_items(tag: str, items: list[tuple[str, str]], dry_run: bool 
         return 0, 0, len(items)
 
     existing = get_existing_assets(tag)
-    todo = [(src, name) for src, name in items if name not in existing]
+    todo = sorted([(src, name) for src, name in items if name not in existing], key=lambda x: x[1])
     skipped = len(items) - len(todo)
 
     if not todo:
         print(f"[{tag}] all {len(items)} items already present.", flush=True)
         return 0, skipped, 0
 
-    print(f"[{tag}] {skipped} already present, copying {len(todo)} items...", flush=True)
+    print(f"[{tag}] {skipped} already present, copying {len(todo)} items in sorted order...", flush=True)
     copied = 0
     failed = 0
 

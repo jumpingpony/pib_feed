@@ -74,6 +74,19 @@ class TestBackfillClassification(unittest.TestCase):
         self.assertEqual(classify_asset("mygov_pulse_1740000000_def.pdf"), "mygov-2025")
         # 1775000000 = April 2026
         self.assertEqual(classify_asset("mygov_mann_ki_baat_1775000000_ghi.pdf"), "mygov-2026")
+        # Date in filename with future/past year in slug
+        self.assertEqual(
+            classify_asset("mygov_pulse_2026-01-08_good-governance-pathway-2026-and-viksit-bharat-2047.pdf"),
+            "mygov-2026",
+        )
+        self.assertEqual(
+            classify_asset("mygov_pulse_2025-08-21_5-years-nep-2020.pdf"),
+            "mygov-2025",
+        )
+        self.assertEqual(
+            classify_asset("mygov_pulse_2026-08-18_six-years-nep-2020.pdf"),
+            "mygov-2026",
+        )
 
     def test_niti_merged_per_year(self):
         self.assertEqual(classify_asset("niti_2023-05_policy_report.pdf"), "niti-2023")
