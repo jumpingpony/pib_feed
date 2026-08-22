@@ -245,10 +245,11 @@ def main() -> int:
 
     ref_by_tag = referenced_assets()
     missing: list[tuple[str, str]] = []
-    for tag in sorted(ref_by_tag.keys()):
+    tags_to_verify = sorted(wanted_by_tag.keys() if wanted_by_tag else ref_by_tag.keys())
+    for tag in tags_to_verify:
         if tag not in have_by_tag:
             have_by_tag[tag] = existing_assets(tag)
-        tag_missing = sorted(ref_by_tag[tag] - have_by_tag[tag])
+        tag_missing = sorted(ref_by_tag.get(tag, set()) - have_by_tag[tag])
         for name in tag_missing:
             print(f"  missing release asset: [{tag}] {name}", file=sys.stderr)
             missing.append((tag, name))
