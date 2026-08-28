@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <head>
+    <title>IPCS feeds (unofficial)</title>
+  </head>
+  <body>
+      <outline text="IPCS (Institute of Peace and Conflict Studies)" title="IPCS (Institute of Peace and Conflict Studies)">
+        <outline type="rss" text="Commentaries - IPCS" title="Commentaries - IPCS" xmlUrl="https://nappingcats.github.io/pib_feed/ipcs-commentaries/feed.xml" htmlUrl="https://www.ipcs.org/commentaries.php"/>
+      </outline>
+  </body>
+</opml>

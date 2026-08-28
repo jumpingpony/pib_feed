@@ -1,0 +1,308 @@
+name: Build RSS Feeds
+
+on:
+  schedule:
+    # Press releases and AIR news move fast; the rest are infrequent. Hourly covers both.
+    - cron: "17 * * * *"
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - pib_feed.py
+      - newsonair_feed.py
+      - visioniaspt365.py
+      - meca.py
+      - mygov.py
+      - scobserver.py
+      - prsindia.py
+      - idsa.py
+      - eacpm.py
+      - economist.py
+      - project_syndicate.py
+      - indianexpress.py
+      - ie_epaper.py
+      - indiatoday.py
+      - niti.py
+      - ipcs.py
+      - indiasworld.py
+      - frontline.py
+      - archive_pdfs.py
+      - .github/workflows/build-feeds.yml
+
+permissions:
+  contents: write   # archive_pdfs.py uploads PDFs as release assets
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    outputs:
+      pages_artifact_id: ${{ steps.pages_artifact.outputs.artifact_id }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Configure Pages
+        id: pages
+        uses: actions/configure-pages@v6
+
+      # Each build step is isolated: continue-on-error keeps one source's failure
+      # from aborting the rest (e.g. PIB's TLS cert lapsing). The real outcome is
+      # captured per-step id and re-checked by the final gate so the run still
+      # goes red — and notifies — when any feed fails.
+      - name: Build PIB feed
+        id: pib
+        continue-on-error: true
+        env:
+          PIB_WORKERS: "10"
+          # Merge with the already-published feeds so history is retained beyond
+          # the scan window. Each feed reads <base>/<key>/feed.xml.
+          PIB_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+        run: python pib_feed.py
+
+      - name: Build News On AIR feeds
+        id: newsonair
+        continue-on-error: true
+        env:
+          NOA_WORKERS: "3"
+          # Same history-retention trick: read each already-published feed from
+          # <base>/<key>/feed.xml and merge, so feeds grow past the source window.
+          NOA_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+        run: python newsonair_feed.py
+
+      - name: Build Vision IAS PT/Mains 365 feeds
+        id: visioniaspt365
+        continue-on-error: true
+        env:
+          VIS_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+          # Point feed items at the archived PDFs on the release, and write the
+          # archive manifests consumed by archive_pdfs.py.
+          VIS_ARCHIVE_MODE: archive
+          VIS_ARCHIVE_BASE_URL: "https://github.com/${{ github.repository }}/releases/download/{feed}-{year}"
+        run: python visioniaspt365.py
+
+      - name: Build Made Easy + NextIAS current-affairs feeds
+        id: meca
+        continue-on-error: true
+        env:
+          MECA_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+          MECA_ARCHIVE_MODE: archive
+          MECA_ARCHIVE_BASE_URL: "https://github.com/${{ github.repository }}/releases/download/{feed}-{year}"
+        run: python meca.py
+
+      - name: Build MyGov PDF feeds
+        id: mygov
+        continue-on-error: true
+        env:
+          MYGOV_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+          MYGOV_ARCHIVE_MODE: archive
+          MYGOV_ARCHIVE_BASE_URL: "https://github.com/${{ github.repository }}/releases/download/mygov-{year}"
+        run: python mygov.py
+
+      - name: Build Supreme Court Observer feeds
+        id: scobserver
+        continue-on-error: true
+        env:
+          SCO_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+        run: python scobserver.py
+
+      - name: Build PRS Legislative Research feeds
+        id: prsindia
+        continue-on-error: true
+        env:
+          PRS_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+        run: python prsindia.py
+
+      - name: Build MP-IDSA feeds
+        id: idsa
+        continue-on-error: true
+        env:
+          IDSA_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+        run: python idsa.py
+
+      - name: Build EAC-PM feeds
+        id: eacpm
+        continue-on-error: true
+        env:
+          EACPM_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+        run: python eacpm.py
+
+      - name: Build The Economist feeds
+        id: economist
+        continue-on-error: true
+        env:
+          ECON_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+          # Cloudflare-protected chart/photo images are mirrored to a yearly
+          # release (e.g. economist-images-{year}); items point there.
+          ECON_ARCHIVE_MODE: archive
+          ECON_ARCHIVE_BASE_URL: "https://github.com/${{ github.repository }}/releases/download/economist-images-{year}"
+        run: python economist.py
+
+      - name: Build Project Syndicate feed
+        id: project_syndicate
+        continue-on-error: true
+        env:
+          PS_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+        run: python project_syndicate.py
+
+      - name: Build The Indian Express feeds
+        id: indianexpress
+        continue-on-error: true
+        env:
+          IE_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+        run: python indianexpress.py
+
+      - name: Build Indian Express epaper feeds (UPSC Essentials, Delhi)
+        id: ie_epaper
+        continue-on-error: true
+        env:
+          GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          IE_EPAPER_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+          # Epaper PDFs live behind signed, expiring URLs, so mirror them to the
+          # release and point items at the durable asset.
+          IE_EPAPER_ARCHIVE_MODE: archive
+          IE_EPAPER_ARCHIVE_BASE_URL: "https://github.com/${{ github.repository }}/releases/download/{feed}-{year}"
+        run: python ie_epaper.py
+
+      - name: Build India Today magazine feed
+        id: indiatoday
+        continue-on-error: true
+        env:
+          IT_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+        run: python indiatoday.py
+
+      - name: Build NITI Aayog publication feeds
+        id: niti
+        continue-on-error: true
+        env:
+          NITI_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+          # Report PDFs are archived to the release and items point at the durable asset.
+          NITI_ARCHIVE_MODE: archive
+          NITI_ARCHIVE_BASE_URL: "https://github.com/${{ github.repository }}/releases/download/niti-{year}"
+        run: python niti.py
+
+      - name: Build IPCS feeds
+        id: ipcs
+        continue-on-error: true
+        env:
+          IPCS_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+        run: python ipcs.py
+
+      - name: Build India's World feed
+        id: indiasworld
+        continue-on-error: true
+        env:
+          INDIASWORLD_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+        run: python indiasworld.py
+
+      - name: Build Frontline magazine and Digital Exclusives feeds
+        id: frontline
+        continue-on-error: true
+        env:
+          FL_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+        run: python frontline.py
+
+      - name: Mirror PDFs to the archive release
+        id: archive_pdfs
+        continue-on-error: true
+        env:
+          GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+        run: python archive_pdfs.py
+
+      - name: Mirror Economist images to the image-archive release
+        id: archive_images
+        continue-on-error: true
+        env:
+          GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          ARCHIVE_MANIFEST_DIR: image_archive
+          # content-assets images 403 to a generic UA; use the whitelisted one.
+          ARCHIVE_UA: "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.7922.76 Mobile Safari/537.36 Liskov"
+        run: python archive_pdfs.py
+
+      - name: Verify archived release assets
+        id: verify_archives
+        continue-on-error: true
+        env:
+          GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+        run: python archive_pdfs.py --verify
+
+      # Publish whatever built (this runs before the gate so a failed feed never
+      # blocks deploying the healthy ones), then fail the run if any step failed.
+      - name: Upload Pages artifact
+        id: pages_artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: public
+
+      - name: Fail the run if any build step failed
+        if: always()
+        run: |
+          declare -A outcomes=(
+            [PIB]="${{ steps.pib.outcome }}"
+            [NewsOnAIR]="${{ steps.newsonair.outcome }}"
+            [VisionIAS]="${{ steps.visioniaspt365.outcome }}"
+            [MadeEasy+NextIAS]="${{ steps.meca.outcome }}"
+            [MyGov]="${{ steps.mygov.outcome }}"
+            [SupremeCourtObserver]="${{ steps.scobserver.outcome }}"
+            [PRSIndia]="${{ steps.prsindia.outcome }}"
+            [MP-IDSA]="${{ steps.idsa.outcome }}"
+            [EAC-PM]="${{ steps.eacpm.outcome }}"
+            [Economist]="${{ steps.economist.outcome }}"
+            [ProjectSyndicate]="${{ steps.project_syndicate.outcome }}"
+            [IndianExpress]="${{ steps.indianexpress.outcome }}"
+            [IE-epaper]="${{ steps.ie_epaper.outcome }}"
+            [IndiaToday]="${{ steps.indiatoday.outcome }}"
+            [NITI]="${{ steps.niti.outcome }}"
+            [IPCS]="${{ steps.ipcs.outcome }}"
+            [IndiasWorld]="${{ steps.indiasworld.outcome }}"
+            [Frontline]="${{ steps.frontline.outcome }}"
+            [ArchivePDFs]="${{ steps.archive_pdfs.outcome }}"
+            [ArchiveImages]="${{ steps.archive_images.outcome }}"
+            [VerifyArchives]="${{ steps.verify_archives.outcome }}"
+          )
+          failed=0
+          for name in "${!outcomes[@]}"; do
+            if [ "${outcomes[$name]}" = "failure" ]; then
+              echo "::error title=Feed build failed::$name"
+              failed=1
+            else
+              echo "ok: $name (${outcomes[$name]})"
+            fi
+          done
+          if [ "$failed" = 1 ]; then
+            echo "One or more feeds failed — healthy feeds were still deployed."
+            exit 1
+          fi
+          echo "All feeds built successfully."
+
+  deploy:
+    needs: build
+    # Publish healthy output after the final gate reports a source failure, but
+    # never create a deployment when the build was cancelled or uploaded nothing.
+    if: >-
+      ${{
+        always() &&
+        needs.build.result != 'cancelled' &&
+        needs.build.outputs.pages_artifact_id != ''
+      }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v5

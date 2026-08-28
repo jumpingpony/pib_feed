@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <head>
+    <title>EAC-PM feeds (unofficial)</title>
+  </head>
+  <body>
+      <outline text="EAC-PM (Economic Advisory Council to the PM)" title="EAC-PM (Economic Advisory Council to the PM)">
+        <outline type="rss" text="Reports - EAC-PM" title="Reports - EAC-PM" xmlUrl="https://nappingcats.github.io/pib_feed/eacpm-reports/feed.xml" htmlUrl="https://eacpm.gov.in/reports/"/>
+      </outline>
+  </body>
+</opml>
