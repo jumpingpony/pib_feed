@@ -2,8 +2,7 @@ name: Build RSS Feeds
 
 on:
   schedule:
-    # Press releases and AIR news move fast; the rest are infrequent. Hourly covers both.
-    - cron: "17 * * * *"
+    - cron: "17 */4 * * *"
   workflow_dispatch: {}
   push:
     branches: [main]
