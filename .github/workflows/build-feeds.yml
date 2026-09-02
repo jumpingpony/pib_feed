@@ -1,7 +1,32 @@
 name: Build RSS Feeds
 
 on:
+  schedule:
+    - cron: "17 */4 * * *"
   workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - pib_feed.py
+      - newsonair_feed.py
+      - visioniaspt365.py
+      - meca.py
+      - mygov.py
+      - scobserver.py
+      - prsindia.py
+      - idsa.py
+      - eacpm.py
+      - economist.py
+      - project_syndicate.py
+      - indianexpress.py
+      - ie_epaper.py
+      - indiatoday.py
+      - niti.py
+      - ipcs.py
+      - indiasworld.py
+      - frontline.py
+      - archive_pdfs.py
+      - .github/workflows/build-feeds.yml
 
 permissions:
   contents: write   # archive_pdfs.py uploads PDFs as release assets
