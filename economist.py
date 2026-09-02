@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """Build full-text RSS feeds from The Economist (economist.com).
 
+NOTE: Omitted from CI workflows (.github/workflows/build-feeds.yml).
+Full article body text is gated behind paywalls on server-side fetches, and
+images require release mirroring. Official feeds are used in OPML instead.
+Retained for local or manual runs.
+
 The Economist is doubly locked down: Cloudflare fronts the whole site with a
 JavaScript challenge (plain requests / cloudscraper / spoofed bot UAs all get
 403), and the articles themselves sit behind the Zephr paywall. Both are
