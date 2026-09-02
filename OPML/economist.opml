@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <head>
+    <title>The Economist RSS feeds (official)</title>
+  </head>
+  <body>
+      <outline text="The Economist" title="The Economist">
+        <outline type="rss" text="Business - The Economist" title="Business - The Economist" xmlUrl="https://www.economist.com/business/rss.xml" htmlUrl="https://www.economist.com/business"/>
+        <outline type="rss" text="Finance &amp; economics - The Economist" title="Finance &amp; economics - The Economist" xmlUrl="https://www.economist.com/finance-and-economics/rss.xml" htmlUrl="https://www.economist.com/finance-and-economics"/>
+        <outline type="rss" text="By Invitation - The Economist" title="By Invitation - The Economist" xmlUrl="https://www.economist.com/by-invitation/rss.xml" htmlUrl="https://www.economist.com/by-invitation"/>
+        <outline type="rss" text="Economic &amp; financial indicators - The Economist" title="Economic &amp; financial indicators - The Economist" xmlUrl="https://www.economist.com/economic-and-financial-indicators/rss.xml" htmlUrl="https://www.economist.com/economic-and-financial-indicators"/>
+        <outline type="rss" text="Podcasts - The Economist" title="Podcasts - The Economist" xmlUrl="https://feeds.acast.com/public/shows/62e28cad7ca7a10012e46a32" htmlUrl="https://www.economist.com/podcasts"/>
+      </outline>
+  </body>
+</opml>

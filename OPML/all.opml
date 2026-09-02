@@ -45,6 +45,13 @@
       <outline text="EAC-PM (Economic Advisory Council to the PM)" title="EAC-PM (Economic Advisory Council to the PM)">
         <outline type="rss" text="Reports - EAC-PM" title="Reports - EAC-PM" xmlUrl="https://jumpingpony.github.io/pib_feed/eacpm-reports/feed.xml" htmlUrl="https://eacpm.gov.in/reports/"/>
       </outline>
+      <outline text="The Economist (official)" title="The Economist (official)">
+        <outline type="rss" text="Business - The Economist" title="Business - The Economist" xmlUrl="https://www.economist.com/business/rss.xml" htmlUrl="https://www.economist.com/business"/>
+        <outline type="rss" text="Finance &amp; economics - The Economist" title="Finance &amp; economics - The Economist" xmlUrl="https://www.economist.com/finance-and-economics/rss.xml" htmlUrl="https://www.economist.com/finance-and-economics"/>
+        <outline type="rss" text="By Invitation - The Economist" title="By Invitation - The Economist" xmlUrl="https://www.economist.com/by-invitation/rss.xml" htmlUrl="https://www.economist.com/by-invitation"/>
+        <outline type="rss" text="Economic &amp; financial indicators - The Economist" title="Economic &amp; financial indicators - The Economist" xmlUrl="https://www.economist.com/economic-and-financial-indicators/rss.xml" htmlUrl="https://www.economist.com/economic-and-financial-indicators"/>
+        <outline type="rss" text="Podcasts - The Economist" title="Podcasts - The Economist" xmlUrl="https://feeds.acast.com/public/shows/62e28cad7ca7a10012e46a32" htmlUrl="https://www.economist.com/podcasts"/>
+      </outline>
       <outline text="Project Syndicate (unofficial, full-text)" title="Project Syndicate (unofficial, full-text)">
         <outline type="rss" text="Commentaries - Project Syndicate" title="Commentaries - Project Syndicate" xmlUrl="https://jumpingpony.github.io/pib_feed/project-syndicate/feed.xml" htmlUrl="https://www.project-syndicate.org/"/>
       </outline>
