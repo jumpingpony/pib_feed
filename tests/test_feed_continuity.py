@@ -56,7 +56,7 @@ FEED_CADENCE = {
     "prs-budgets": Cadence.SEASONAL,
     "prs-acts": Cadence.SEASONAL,
     "prs-bills": Cadence.SEASONAL,
-    "mygov_mann_ki_baat": Cadence.SEASONAL,
+    "mygov_mannkibaat": Cadence.SEASONAL,
     "mygov_pulse": Cadence.SEASONAL,
     "mygov_bharat_matters": Cadence.SEASONAL,
     "backgrounders": Cadence.SEASONAL,

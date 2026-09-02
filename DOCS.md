@@ -253,16 +253,16 @@ the same PDF archival as the current-affairs feeds.
 |------|------|------|
 | Bharat Matters | MyGov Bharat Matters ebooks | [feed.xml](https://jumpingpony.github.io/pib_feed/mygov_bharat_matters/feed.xml) |
 | Pulse Newsletter | MyGov Pulse newsletter | [feed.xml](https://jumpingpony.github.io/pib_feed/mygov_pulse/feed.xml) |
-| Read Mann Ki Baat | MyGov Read Mann Ki Baat | [feed.xml](https://jumpingpony.github.io/pib_feed/mygov_mann_ki_baat/feed.xml) |
+| Read Mann Ki Baat | MyGov Read Mann Ki Baat | [feed.xml](https://jumpingpony.github.io/pib_feed/mygov_mannkibaat/feed.xml) |
 
 ## How it works
 
 Each source is a paginated Drupal listing. `mygov.py` **scrapes the actual PDF
-link** from every card (`static.mygov.in/.../s3fs-public/…/mygov_<epoch>_<hash>.pdf`)
-rather than constructing URLs, reads the card title, and derives the date from
-the Unix timestamp embedded in the PDF filename. It walks `?page=N` until a page
-yields no new PDFs. Items from `ARCHIVE_MIN_YEAR` onward are archived to the
-release (PDFs are small, ~2–3 MB). Config mirrors the other PDF feeds
+link** from every card (`static.mygov.in/...`), reads the card title, and
+derives the date from the card's publication timestamp (`<span class="publish-time">`).
+It walks `?page=N` until reaching issues prior to `ARCHIVE_MIN_YEAR`. Items from
+`ARCHIVE_MIN_YEAR` onward are archived to the release (PDFs are small, ~2–3 MB).
+Config mirrors the other PDF feeds
 (`MYGOV_ARCHIVE_MODE`, `MYGOV_ARCHIVE_BASE_URL`, `MYGOV_PUBLISHED_BASE_URL`,
 `MYGOV_MAX_PAGES` default 8).
 

@@ -56,7 +56,7 @@ BASE = "https://www.economist.com"
 UA = os.environ.get(
     "ECON_UA",
     "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/151.0.7922.76 Mobile Safari/537.36 Liskov",
+    "(KHTML, like Gecko) Chrome/150.0.0.0 Mobile Safari/537.36 Liskov",
 )
 # Use the repository-standard UA once a request leaves economist.com. In
 # particular, the one-byte range probe against the MP3 host does not need the

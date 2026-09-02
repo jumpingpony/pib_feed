@@ -24,7 +24,7 @@
       <outline text="MyGov" title="MyGov">
         <outline type="rss" text="Bharat Matters - MyGov" title="Bharat Matters - MyGov" xmlUrl="https://jumpingpony.github.io/pib_feed/mygov_bharat_matters/feed.xml" htmlUrl="https://www.mygov.in/bharat-matters"/>
         <outline type="rss" text="Pulse Newsletter - MyGov" title="Pulse Newsletter - MyGov" xmlUrl="https://jumpingpony.github.io/pib_feed/mygov_pulse/feed.xml" htmlUrl="https://www.mygov.in/pulse-newsletter"/>
-        <outline type="rss" text="Read Mann Ki Baat - MyGov" title="Read Mann Ki Baat - MyGov" xmlUrl="https://jumpingpony.github.io/pib_feed/mygov_mann_ki_baat/feed.xml" htmlUrl="https://www.mygov.in/read-mkb-more"/>
+        <outline type="rss" text="Read Mann Ki Baat - MyGov" title="Read Mann Ki Baat - MyGov" xmlUrl="https://jumpingpony.github.io/pib_feed/mygov_mannkibaat/feed.xml" htmlUrl="https://www.mygov.in/read-mkb-more"/>
       </outline>
       <outline text="Supreme Court Observer" title="Supreme Court Observer">
         <outline type="rss" text="Cases - Supreme Court Observer" title="Cases - Supreme Court Observer" xmlUrl="https://jumpingpony.github.io/pib_feed/scobserver_cases/feed.xml" htmlUrl="https://www.scobserver.in/cases/"/>

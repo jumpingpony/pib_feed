@@ -30,7 +30,7 @@ import json
 import os
 import re
 import sys
-from email.utils import format_datetime
+from email.utils import format_datetime, parsedate_to_datetime
 from xml.sax.saxutils import escape
 
 import requests
@@ -223,7 +223,7 @@ def collect_nextias(session: requests.Session, newest_id: int = 0) -> list[dict]
                 if not mon:
                     continue
                 crux = "crux" in title_raw.lower()
-                item_id = yr * 100 + mon
+                item_id = (yr * 100 + mon) * 10 + (1 if crux else 0)
                 if item_id <= newest_id:
                     continue
                 label = f"Monthly Current Affairs — {tm.group(1).title()} {yr}"
@@ -234,15 +234,13 @@ def collect_nextias(session: requests.Session, newest_id: int = 0) -> list[dict]
                         "id": item_id,
                         "link": pdf,
                         "title": label,
-                        "date": dt.datetime(yr, mon, 1, tzinfo=IST),
+                        "date": dt.datetime(yr, mon, 15 if crux else 1, 12, tzinfo=IST),
                         "pdf": pdf,
                         "archival_name": f"nextias_monthly-current-affairs_{yr}-{mon:02d}"
                         f"{'_crux' if crux else ''}.pdf",
                     }
                 )
                 newer_on_page += 1
-            if newest_id and newer_on_page == 0:
-                return out
             if len(recs) < 6:
                 break
             start += len(recs)
@@ -305,7 +303,12 @@ def _guid_id(block: str) -> int | None:
     if not g:
         return None
     m = re.search(r"urn:meca:[^:]+:(\d+)", g.group(1))
-    return int(m.group(1)) if m else None
+    if not m:
+        return None
+    val = int(m.group(1))
+    if "nextias" in g.group(1) and val < 1000000:
+        return val * 10 + (1 if "(The Crux)" in block or "(THE CRUX)" in block else 0)
+    return val
 
 
 def load_published(session: requests.Session, key: str) -> dict[int, str]:
@@ -354,8 +357,28 @@ def render_item(key: str, art: dict) -> str:
     )
 
 
+PUBDATE_RE = re.compile(r"<pubDate>([^<]+)</pubDate>")
+
+
+def _block_date(block: str) -> dt.datetime:
+    match = PUBDATE_RE.search(block)
+    if match:
+        try:
+            return parsedate_to_datetime(match.group(1).strip())
+        except (TypeError, ValueError):
+            pass
+    return dt.datetime(1970, 1, 1, tzinfo=dt.timezone.utc)
+
+
 def build_feed(feed: dict, items_by_id: dict[int, str]) -> str:
-    ordered = [items_by_id[i] for i in sorted(items_by_id, reverse=True)][: feed["max_items"]]
+    ordered = [
+        items_by_id[i]
+        for i in sorted(
+            items_by_id,
+            key=lambda i: (_block_date(items_by_id[i]), i),
+            reverse=True,
+        )
+    ][: feed["max_items"]]
     now = format_datetime(dt.datetime.now(IST))
     self_url = f"{PUBLISHED_BASE_URL}/{feed['key']}/feed.xml" if PUBLISHED_BASE_URL else ""
     atom = (

@@ -200,7 +200,7 @@ def run_migration(mode: RunMode) -> None:
 
         print(f"Adding feed: {item['title']} ({new_url})...")
         code, resp = api_request("POST", "subscription/quickadd", token, state, mode, params={"quickadd": new_url})
-        if code == 200:
+        if code == 200 and mode != RunMode.DRY_RUN:
             stream_id = resp.get("streamId") if isinstance(resp, dict) else f"feed/{new_url}"
             state["subscribed"][new_url] = stream_id or f"feed/{new_url}"
             save_state(state)
@@ -222,7 +222,7 @@ def run_migration(mode: RunMode) -> None:
             "a": f"user/-/label/{item['folder']}",
         }
         code, resp = api_request("POST", "subscription/edit", token, state, mode, data=payload)
-        if code == 200:
+        if code == 200 and mode != RunMode.DRY_RUN:
             state["configured"].append(stream_id)
             save_state(state)
 
@@ -238,7 +238,7 @@ def run_migration(mode: RunMode) -> None:
             "s": old_stream,
         }
         code, resp = api_request("POST", "subscription/edit", token, state, mode, data=payload)
-        if code == 200:
+        if code == 200 and mode != RunMode.DRY_RUN:
             state["unsubscribed"].append(old_stream)
             save_state(state)
 

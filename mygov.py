@@ -25,7 +25,8 @@ import html
 import os
 import re
 import sys
-from email.utils import format_datetime
+from email.utils import format_datetime, parsedate_to_datetime
+from urllib.parse import unquote
 from xml.sax.saxutils import escape
 
 import requests
@@ -65,11 +66,11 @@ FEEDS = [
         "max_items": 200,
     },
     {
-        "key": "mygov_mann_ki_baat",
+        "key": "mygov_mannkibaat",
         "title": "Read Mann Ki Baat - MyGov",
-        "desc": "Unofficial PDF feed of MyGov Read Mann Ki Baat.",
+        "desc": "Unofficial feed of Mann Ki Baat monthly booklets from MyGov.",
         "path": "/read-mkb-more",
-        "max_items": 200,
+        "max_items": 100,
     },
 ]
 
@@ -98,10 +99,31 @@ def fetch(session: requests.Session, url: str) -> str | None:
 
 
 # --- scraping -----------------------------------------------------------------
+CARD_RE = re.compile(
+    r'<div[^>]+class=["\'][^"\']*news-item[^"\']*["\'].*?'
+    r'(?=(?:<div[^>]+class=["\'][^"\']*news-item|\Z))',
+    re.S,
+)
 PDF_RE = re.compile(r'https://static\.mygov\.in/[^"\'\s]+\.pdf', re.I)
 HEAD_RE = re.compile(r"<h[1-5][^>]*>(.*?)</h[1-5]>", re.S | re.I)
 EBOOK_RE = re.compile(r"(https://www\.mygov\.in/mygov-ebook/[a-z0-9-]+)", re.I)
+EBOOK_SHARE_RE = re.compile(
+    r'sharer\.php\?u=(https%3A%2F%2Fwww\.mygov\.in%2Fmygov-ebook%2F[a-z0-9-]+|https://www\.mygov\.in/mygov-ebook/[a-z0-9-]+)',
+    re.I,
+)
 EPOCH_RE = re.compile(r"mygov_(\d{10})")
+PUBLISH_TIME_RE = re.compile(
+    r'class=["\'][^"\']*publish-time[^"\']*["\'][^>]*>\s*(\d{1,2})/(\d{1,2})/(\d{4})',
+    re.I,
+)
+TITLE_DATE_RE = re.compile(
+    r"\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{4})\b",
+    re.I,
+)
+MONTHS = {
+    "january": 1, "february": 2, "march": 3, "april": 4, "may": 5, "june": 6,
+    "july": 7, "august": 8, "september": 9, "october": 10, "november": 11, "december": 12,
+}
 TAG_RE = re.compile(r"<[^>]+>")
 
 
@@ -109,8 +131,55 @@ def _slug(url: str) -> str:
     return url.rstrip("/").rsplit("/", 1)[-1]
 
 
+def _parse_card_date(card_text: str, title: str, pdf: str) -> dt.datetime | None:
+    dm = PUBLISH_TIME_RE.search(card_text)
+    if dm:
+        d, mo, y = int(dm.group(1)), int(dm.group(2)), int(dm.group(3))
+        try:
+            return dt.datetime(y, mo, d, 12, 0, tzinfo=IST)
+        except ValueError:
+            pass
+
+    tm = TITLE_DATE_RE.search(title)
+    if tm:
+        mo = MONTHS.get(tm.group(1).lower(), 1)
+        y = int(tm.group(2))
+        return dt.datetime(y, mo, 1, 12, 0, tzinfo=IST)
+
+    em = EPOCH_RE.search(pdf)
+    if em:
+        try:
+            return dt.datetime.fromtimestamp(int(em.group(1)), tz=dt.timezone.utc).astimezone(IST)
+        except (ValueError, OSError):
+            pass
+
+    return None
+
+
 def parse_page(page: str) -> list[dict]:
     """Extract (title, ebook link, pdf, date) per card by scraping the page."""
+    cards = CARD_RE.findall(page)
+    if cards:
+        out = []
+        for c in cards:
+            pm = PDF_RE.search(c)
+            if not pm:
+                continue
+            pdf = pm.group(0)
+            hm = HEAD_RE.search(c)
+            title = html.unescape(TAG_RE.sub("", hm.group(1))).strip() if hm else ""
+            eb = EBOOK_RE.findall(c)
+            if eb:
+                link = eb[-1]
+            else:
+                sm = EBOOK_SHARE_RE.search(c)
+                link = unquote(sm.group(1)) if sm else pdf
+            date = _parse_card_date(c, title, pdf)
+            em = EPOCH_RE.search(pdf)
+            item_id = int(em.group(1)) if em else int(hashlib.md5(pdf.encode()).hexdigest(), 16) % (10**10)
+            out.append({"id": item_id, "pdf": pdf, "link": link, "title": title, "date": date})
+        return out
+
     out = []
     for m in PDF_RE.finditer(page):
         pdf = m.group(0)
@@ -120,51 +189,48 @@ def parse_page(page: str) -> list[dict]:
         title = heads[-1] if heads else ""
         eb = EBOOK_RE.findall(window)
         link = eb[-1] if eb else pdf
+        date = _parse_card_date(window, title, pdf)
         em = EPOCH_RE.search(pdf)
-        date = None
-        if em:
-            try:
-                date = dt.datetime.fromtimestamp(int(em.group(1)), tz=dt.timezone.utc).astimezone(IST)
-            except (ValueError, OSError):
-                date = None
-        # stable across runs (hash() is salted per-process)
-        item_id = (
-            int(em.group(1))
-            if em
-            else int(hashlib.md5(pdf.encode()).hexdigest(), 16) % (10**10)
-        )
+        item_id = int(em.group(1)) if em else int(hashlib.md5(pdf.encode()).hexdigest(), 16) % (10**10)
         out.append({"id": item_id, "pdf": pdf, "link": link, "title": title, "date": date})
     return out
 
 
 def archival_name(key: str, art: dict) -> str:
     src = key.replace("mygov_", "")
-    stamp = art["date"].strftime("%Y-%m-%d") if art["date"] else str(art["id"])
-    slug = _slug(art["link"]) if art["link"].startswith(BASE) else str(art["id"])
+    stamp = art["date"].strftime("%Y-%m-%d") if art.get("date") else str(art.get("id", "item"))
+    slug = _slug(art["link"]) if art.get("link", "").startswith(BASE) else str(art.get("id", "item"))
     return f"mygov_{src}_{stamp}_{slug}.pdf"[:180]
 
 
 def collect(
-    session: requests.Session, feed: dict, published_ids: set[int]
+    session: requests.Session, feed: dict, published_guids: set[str]
 ) -> list[dict]:
-    items: dict[int, dict] = {}
-    newest_published_id = max(published_ids, default=0)
+    items: dict[str, dict] = {}
     for page_no in range(MAX_PAGES):
         page = fetch(session, f"{BASE}{feed['path']}?page={page_no}")
         if not page:
             break
         listed = parse_page(page)
+        if not listed:
+            break
         fresh = 0
+        in_range = 0
+        all_past_min_year = True
         for art in listed:
-            if (
-                art["date"] is not None
-                and art["id"] > newest_published_id
-                and art["id"] not in items
-            ):
-                items[art["id"]] = art
-                fresh += 1
-        print(f"  {feed['key']} page={page_no}: {len(listed)} listed, {fresh} newer")
-        if listed and fresh == 0:  # newest-first listing has reached feed history
+            year = art["date"].year if art.get("date") else None
+            if year is not None and year < ARCHIVE_MIN_YEAR:
+                continue
+            all_past_min_year = False
+            in_range += 1
+            if art["pdf"] not in items:
+                items[art["pdf"]] = art
+                if art["pdf"] not in published_guids:
+                    fresh += 1
+        print(f"  {feed['key']} page={page_no}: {len(listed)} listed, {fresh} new, {in_range} in-range")
+        if all_past_min_year:
+            break
+        if published_guids and in_range > 0 and fresh == 0:
             break
     return list(items.values())
 
@@ -190,25 +256,29 @@ def item_pdf_url(key: str, art: dict) -> str:
 
 # --- feed I/O -----------------------------------------------------------------
 ITEM_RE = re.compile(r"<item>.*?</item>", re.S)
+GUID_TAG_RE = re.compile(r"<guid[^>]*>([^<]+)</guid>")
+PUBDATE_RE = re.compile(r"<pubDate>([^<]+)</pubDate>")
 
 
-def _guid_id(block: str) -> int | None:
-    m = re.search(r"mygov_(\d{10})", block)
-    return int(m.group(1)) if m else None
-
-
-def load_published(session: requests.Session, key: str) -> dict[int, str]:
+def load_published(session: requests.Session, key: str) -> dict[str, tuple[str, dt.datetime]]:
     if not PUBLISHED_BASE_URL:
         return {}
     body = fetch(session, f"{PUBLISHED_BASE_URL}/{key}/feed.xml")
     if not body:
         return {}
-    items: dict[int, str] = {}
+    items: dict[str, tuple[str, dt.datetime]] = {}
     for m in ITEM_RE.finditer(body):
         block = m.group(0).strip()
-        k = _guid_id(block)
-        if k is not None:
-            items[k] = block
+        gm = GUID_TAG_RE.search(block)
+        if not gm:
+            continue
+        guid = html.unescape(gm.group(1).strip())
+        pm = PUBDATE_RE.search(block)
+        try:
+            when = parsedate_to_datetime(pm.group(1).strip()) if pm else dt.datetime(1970, 1, 1, tzinfo=IST)
+        except (TypeError, ValueError):
+            when = dt.datetime(1970, 1, 1, tzinfo=IST)
+        items[guid] = (block, when)
     print(f"  {key}: loaded {len(items)} published items")
     return items
 
@@ -234,8 +304,25 @@ def render_item(key: str, art: dict) -> str:
     )
 
 
-def build_feed(feed: dict, items_by_id: dict[int, str]) -> str:
-    ordered = [items_by_id[i] for i in sorted(items_by_id, reverse=True)][: feed["max_items"]]
+def _item_date(val: tuple[str, dt.datetime] | str) -> dt.datetime:
+    if isinstance(val, tuple):
+        return val[1]
+    m = PUBDATE_RE.search(val)
+    if m:
+        try:
+            return parsedate_to_datetime(m.group(1).strip())
+        except (TypeError, ValueError):
+            pass
+    return dt.datetime(1970, 1, 1, tzinfo=IST)
+
+
+def _item_block(val: tuple[str, dt.datetime] | str) -> str:
+    return val[0] if isinstance(val, tuple) else val
+
+
+def build_feed(feed: dict, items: dict) -> str:
+    ordered = sorted(items.values(), key=_item_date, reverse=True)[: feed["max_items"]]
+    blocks = [_item_block(v) for v in ordered]
     now = format_datetime(dt.datetime.now(IST))
     self_url = f"{PUBLISHED_BASE_URL}/{feed['key']}/feed.xml" if PUBLISHED_BASE_URL else ""
     atom = (
@@ -254,7 +341,7 @@ def build_feed(feed: dict, items_by_id: dict[int, str]) -> str:
         "    <language>en</language>\n"
         f"    <lastBuildDate>{now}</lastBuildDate>\n"
         f"{atom}"
-        + "\n".join(ordered)
+        + "\n".join(blocks)
         + "\n  </channel>\n</rss>\n"
     )
 
@@ -288,25 +375,26 @@ def write_manifest(key: str, entries: list[dict]) -> None:
 # --- main ---------------------------------------------------------------------
 def run_feed(session: requests.Session, feed: dict) -> int:
     print(f"[{feed['key']}]")
-    existing = load_published(session, feed["key"])
-    arts = collect(session, feed, set(existing))
-    kept, manifest = 0, []
+    merged = load_published(session, feed["key"])
+    arts = collect(session, feed, set(merged))
+    new, manifest = 0, []
     for art in arts:
-        year = art["date"].year if art["date"] else None
+        year = art["date"].year if art.get("date") else None
         if year is None or year < ARCHIVE_MIN_YEAR:
             continue
-        existing[art["id"]] = render_item(feed["key"], art).strip()
-        kept += 1
+        if art["pdf"] not in merged:
+            new += 1
+        merged[art["pdf"]] = (render_item(feed["key"], art).strip(), art["date"])
         if ARCHIVE_MODE == "archive":
             name = archival_name(feed["key"], art)
             manifest.append({"name": name, "url": art["pdf"], "tag": archive_tag_for(art)})
     if ARCHIVE_MODE == "archive":
         write_manifest(feed["key"], manifest)
-    xml = build_feed(feed, existing)
-    total = min(len(existing), feed["max_items"])
-    write_feed(feed, xml, total)
-    print(f"  {feed['key']}: fetched {kept}/{len(arts)} in-range, feed now {total}")
-    return total
+    xml = build_feed(feed, merged)
+    kept = min(len(merged), feed["max_items"])
+    write_feed(feed, xml, kept)
+    print(f"  {feed['key']}: fetched {new} new, feed now {kept}")
+    return kept
 
 
 def main() -> int:
