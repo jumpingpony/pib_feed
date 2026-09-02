@@ -1,0 +1,45 @@
+name: Probe Feeds
+
+on:
+  workflow_dispatch:
+    inputs:
+      feed:
+        description: 'Feed key substring to probe (e.g. "pib", "niti", "all")'
+        required: false
+        default: 'all'
+
+concurrency:
+  group: probe-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Probe feeds and audit 5 newest entries
+        id: probe
+        env:
+          PROBE_FILTER: "${{ github.event.inputs.feed || 'all' }}"
+          PROBE_BASE_URL: "https://jumpingpony.github.io/pib_feed"
+        run: python scripts/probe_feeds.py --feed "$PROBE_FILTER"
+
+      - name: Upload probe report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: probe-report
+          path: probe_report.md
