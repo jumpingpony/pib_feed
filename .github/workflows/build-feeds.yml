@@ -16,7 +16,6 @@ on:
       - prsindia.py
       - idsa.py
       - eacpm.py
-      - economist.py
       - project_syndicate.py
       - indianexpress.py
       - ie_epaper.py
@@ -137,17 +136,6 @@ jobs:
           EACPM_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
         run: python eacpm.py
 
-      - name: Build The Economist feeds
-        id: economist
-        continue-on-error: true
-        env:
-          ECON_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
-          # Cloudflare-protected chart/photo images are mirrored to a yearly
-          # release (e.g. economist-images-{year}); items point there.
-          ECON_ARCHIVE_MODE: archive
-          ECON_ARCHIVE_BASE_URL: "https://github.com/${{ github.repository }}/releases/download/economist-images-{year}"
-        run: python economist.py
-
       - name: Build Project Syndicate feed
         id: project_syndicate
         continue-on-error: true
@@ -219,16 +207,6 @@ jobs:
           GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
         run: python archive_pdfs.py
 
-      - name: Mirror Economist images to the image-archive release
-        id: archive_images
-        continue-on-error: true
-        env:
-          GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
-          ARCHIVE_MANIFEST_DIR: image_archive
-          # content-assets images 403 to a generic UA; use the whitelisted one.
-          ARCHIVE_UA: "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.7922.76 Mobile Safari/537.36 Liskov"
-        run: python archive_pdfs.py
-
       - name: Verify archived release assets
         id: verify_archives
         continue-on-error: true
@@ -257,7 +235,6 @@ jobs:
             [PRSIndia]="${{ steps.prsindia.outcome }}"
             [MP-IDSA]="${{ steps.idsa.outcome }}"
             [EAC-PM]="${{ steps.eacpm.outcome }}"
-            [Economist]="${{ steps.economist.outcome }}"
             [ProjectSyndicate]="${{ steps.project_syndicate.outcome }}"
             [IndianExpress]="${{ steps.indianexpress.outcome }}"
             [IE-epaper]="${{ steps.ie_epaper.outcome }}"
@@ -267,7 +244,6 @@ jobs:
             [IndiasWorld]="${{ steps.indiasworld.outcome }}"
             [Frontline]="${{ steps.frontline.outcome }}"
             [ArchivePDFs]="${{ steps.archive_pdfs.outcome }}"
-            [ArchiveImages]="${{ steps.archive_images.outcome }}"
             [VerifyArchives]="${{ steps.verify_archives.outcome }}"
           )
           failed=0

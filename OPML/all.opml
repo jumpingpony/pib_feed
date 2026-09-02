@@ -45,13 +45,6 @@
       <outline text="EAC-PM (Economic Advisory Council to the PM)" title="EAC-PM (Economic Advisory Council to the PM)">
         <outline type="rss" text="Reports - EAC-PM" title="Reports - EAC-PM" xmlUrl="https://jumpingpony.github.io/pib_feed/eacpm-reports/feed.xml" htmlUrl="https://eacpm.gov.in/reports/"/>
       </outline>
-      <outline text="The Economist (unofficial, full-text)" title="The Economist (unofficial, full-text)">
-        <outline type="rss" text="Economic &amp; financial indicators - Economist" title="Economic &amp; financial indicators - Economist" xmlUrl="https://jumpingpony.github.io/pib_feed/economist-indicators/feed.xml" htmlUrl="https://www.economist.com/topics/economic-and-financial-indicators"/>
-        <outline type="rss" text="Finance &amp; economics - Economist" title="Finance &amp; economics - Economist" xmlUrl="https://jumpingpony.github.io/pib_feed/economist-finance-and-economics/feed.xml" htmlUrl="https://www.economist.com/finance-and-economics"/>
-        <outline type="rss" text="Business - Economist" title="Business - Economist" xmlUrl="https://jumpingpony.github.io/pib_feed/economist-business/feed.xml" htmlUrl="https://www.economist.com/topics/business"/>
-        <outline type="rss" text="By Invitation - Economist" title="By Invitation - Economist" xmlUrl="https://jumpingpony.github.io/pib_feed/economist-by-invitation/feed.xml" htmlUrl="https://www.economist.com/topics/by-invitation"/>
-        <outline type="rss" text="Podcasts - Economist" title="Podcasts - Economist" xmlUrl="https://jumpingpony.github.io/pib_feed/economist-podcasts/feed.xml" htmlUrl="https://www.economist.com/podcasts"/>
-      </outline>
       <outline text="Project Syndicate (unofficial, full-text)" title="Project Syndicate (unofficial, full-text)">
         <outline type="rss" text="Commentaries - Project Syndicate" title="Commentaries - Project Syndicate" xmlUrl="https://jumpingpony.github.io/pib_feed/project-syndicate/feed.xml" htmlUrl="https://www.project-syndicate.org/"/>
       </outline>

@@ -187,7 +187,6 @@ releases are partitioned cleanly:
 - **Newspapers / E-papers**: Partitioned per-feed per-year under `indianexpress-delhi-{year}` and `upsc-essentials-{year}`.
 - **Vision IAS**: Partitioned per-feed per-year under `visionias-pt365-{year}` and `visionias-mains365-{year}`.
 - **Made Easy & NextIAS**: Partitioned per-feed per-year under `madeeasy-weekly-{year}` and `nextias-magazine-{year}`.
-- **Economist Images**: Partitioned under `economist-images-{year}`.
 - **Legacy Releases**: `pdf-archive` and `image-archive` remain permanently on GitHub with all original assets intact, guaranteeing that legacy direct links never 404 or break.
 
 1. In archive mode (`*_ARCHIVE_MODE=archive`), feed scripts write `archive/<key>.json` manifests of `{name, url, tag}` and point feed items at the release URL.
@@ -709,18 +708,9 @@ python niti.py && python archive_pdfs.py
 
 ---
 
-# The Economist feeds — full-text (unofficial)
+# The Economist feeds (disabled)
 
-Full-text RSS feeds for [The Economist](https://www.economist.com), built by
-`economist.py`.
-
-| Feed | What | GitHub Pages |
-|------|------|------|
-| Business | the weekly Business section articles | [feed.xml](https://jumpingpony.github.io/pib_feed/economist-business/feed.xml) |
-| By Invitation | guest commentary from outside contributors | [feed.xml](https://jumpingpony.github.io/pib_feed/economist-by-invitation/feed.xml) |
-| Finance & economics | the weekly Finance & economics articles | [feed.xml](https://jumpingpony.github.io/pib_feed/economist-finance-and-economics/feed.xml) |
-| Economic & financial indicators | the weekly economic-data & chart pages | [feed.xml](https://jumpingpony.github.io/pib_feed/economist-indicators/feed.xml) |
-| Podcasts | direct MP3 enclosures and complete transcripts | [feed.xml](https://jumpingpony.github.io/pib_feed/economist-podcasts/feed.xml) |
+The Economist feeds are currently disabled and omitted from publication.
 
 ## Why this exists
 
