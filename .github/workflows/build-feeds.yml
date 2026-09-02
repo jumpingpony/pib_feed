@@ -106,8 +106,7 @@ jobs:
         continue-on-error: true
         env:
           MYGOV_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
-          MYGOV_ARCHIVE_MODE: archive
-          MYGOV_ARCHIVE_BASE_URL: "https://github.com/${{ github.repository }}/releases/download/mygov-{year}"
+          MYGOV_ARCHIVE_MODE: link
         run: python mygov.py
 
       - name: Build Supreme Court Observer feeds

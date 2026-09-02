@@ -52,14 +52,14 @@ ARCHIVE_MIN_YEAR = int(os.environ.get("ARCHIVE_MIN_YEAR", "2024"))
 
 FEEDS = [
     {
-        "key": "mygov_bharat_matters",
+        "key": "mygov_bharatmatters",
         "title": "Bharat Matters - MyGov",
         "desc": "Unofficial PDF feed of MyGov Bharat Matters.",
         "path": "/bharat-matters",
         "max_items": 200,
     },
     {
-        "key": "mygov_pulse",
+        "key": "mygov_pulsenewsletter",
         "title": "Pulse Newsletter - MyGov",
         "desc": "Unofficial PDF feed of the MyGov Pulse newsletter.",
         "path": "/pulse-newsletter",

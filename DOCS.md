@@ -251,8 +251,8 @@ the same PDF archival as the current-affairs feeds.
 
 | Feed | What | GitHub Pages |
 |------|------|------|
-| Bharat Matters | MyGov Bharat Matters ebooks | [feed.xml](https://jumpingpony.github.io/pib_feed/mygov_bharat_matters/feed.xml) |
-| Pulse Newsletter | MyGov Pulse newsletter | [feed.xml](https://jumpingpony.github.io/pib_feed/mygov_pulse/feed.xml) |
+| Bharat Matters | MyGov Bharat Matters ebooks | [feed.xml](https://jumpingpony.github.io/pib_feed/mygov_bharatmatters/feed.xml) |
+| Pulse Newsletter | MyGov Pulse newsletter | [feed.xml](https://jumpingpony.github.io/pib_feed/mygov_pulsenewsletter/feed.xml) |
 | Read Mann Ki Baat | MyGov Read Mann Ki Baat | [feed.xml](https://jumpingpony.github.io/pib_feed/mygov_mannkibaat/feed.xml) |
 
 ## How it works
