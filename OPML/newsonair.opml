@@ -5,7 +5,7 @@
   </head>
   <body>
       <outline text="News On AIR" title="News On AIR">
-        <outline type="rss" text="News On AIR - All India Radio" title="News On AIR - All India Radio" xmlUrl="https://nappingcats.github.io/pib_feed/newsonair/feed.xml" htmlUrl="https://newsonair.gov.in"/>
+        <outline type="rss" text="News On AIR - All India Radio" title="News On AIR - All India Radio" xmlUrl="https://jumpingpony.github.io/pib_feed/newsonair/feed.xml" htmlUrl="https://newsonair.gov.in"/>
       </outline>
   </body>
 </opml>

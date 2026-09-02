@@ -35,6 +35,7 @@ import html
 import os
 import re
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from email.utils import format_datetime, parsedate_to_datetime
 from xml.sax.saxutils import escape
 
@@ -80,7 +81,7 @@ FEEDS = [
         "rest_base": "journal",
         "title": "Journal - Supreme Court Observer",
         "desc": "Unofficial feed of Supreme Court Observer analysis and opinion articles.",
-        "full": False,
+        "full": True,
         "max_items": 500,
     },
     {
@@ -363,12 +364,37 @@ def write_feed(feed: dict, xml: str, count: int) -> None:
         )
 
 
+def fetch_journal_detail(session: requests.Session, art: dict) -> None:
+    r = fetch(session, art["link"])
+    if not r:
+        return
+    m = re.search(
+        r'<div class="[^"]*single-journal__body[^"]*"[^>]*>(.*?)(?:<!-- \.single-journal__body -->|<div class="single-journal__tags")',
+        r.text,
+        re.S,
+    )
+    if m:
+        full_body = m.group(1).strip()
+        orig_banner = (
+            f'<p class="feed-orig-date"><strong>Original Publication Date:</strong> '
+            f'{art["date"].strftime("%Y-%m-%d")}</p>\n'
+        )
+        tags_html = ""
+        if art.get("terms"):
+            tags_html = f'\n<p class="sco-tags"><em>Tags: {", ".join(escape(t) for t in art["terms"])}</em></p>'
+        art["body_html"] = orig_banner + full_body + tags_html
+
+
 # --- main ---------------------------------------------------------------------
 def run_feed(session: requests.Session, feed: dict, cutoff: dt.datetime) -> int:
     print(f"[{feed['key']}]")
     merged = load_published(session, feed, cutoff)
     known_dates = {link.rstrip("/"): date for link, (date, _) in merged.items()}
     fresh = collect(session, feed, cutoff, known_dates)
+    if feed["key"] == "scobserver-journal" and fresh:
+        print(f"  Fetching full bodies for {len(fresh)} journal items...")
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            list(executor.map(lambda a: fetch_journal_detail(session, a), fresh))
     for art in fresh:
         merged[art["link"]] = (art["date"], render_item(art).strip())
     xml, kept = build_feed(feed, merged)

@@ -75,17 +75,17 @@ class TestArchivePdfs(unittest.TestCase):
     <item>
       <title>Legacy Item</title>
       <pubDate>{now_str}</pubDate>
-      <enclosure url="https://github.com/nappingcats/pib_feed/releases/download/pdf-archive/legacy_file.pdf" />
+      <enclosure url="https://github.com/jumpingpony/pib_feed/releases/download/pdf-archive/legacy_file.pdf" />
     </item>
     <item>
       <title>New Delhi Item</title>
       <pubDate>{now_str}</pubDate>
-      <enclosure url="https://github.com/nappingcats/pib_feed/releases/download/indianexpress-delhi-2026/delhi_2026-06-01.pdf" />
+      <enclosure url="https://github.com/jumpingpony/pib_feed/releases/download/indianexpress-delhi-2026/delhi_2026-06-01.pdf" />
     </item>
     <item>
       <title>MyGov Item</title>
       <pubDate>{now_str}</pubDate>
-      <link>https://github.com/nappingcats/pib_feed/releases/download/mygov-2026/mygov_2026_01.pdf</link>
+      <link>https://github.com/jumpingpony/pib_feed/releases/download/mygov-2026/mygov_2026_01.pdf</link>
     </item>
   </channel>
 </rss>"""
@@ -163,7 +163,7 @@ class TestArchivePdfs(unittest.TestCase):
     <item>
       <title>Test Item</title>
       <pubDate>{now_str}</pubDate>
-      <enclosure url="https://github.com/nappingcats/pib_feed/releases/download/mygov-2026/mygov_2026_01.pdf" />
+      <enclosure url="https://github.com/jumpingpony/pib_feed/releases/download/mygov-2026/mygov_2026_01.pdf" />
     </item>
   </channel>
 </rss>"""
@@ -189,7 +189,7 @@ class TestArchivePdfs(unittest.TestCase):
     <item>
       <title>Test Item</title>
       <pubDate>{now_str}</pubDate>
-      <enclosure url="https://github.com/nappingcats/pib_feed/releases/download/mygov-2026/mygov_2026_01.pdf" />
+      <enclosure url="https://github.com/jumpingpony/pib_feed/releases/download/mygov-2026/mygov_2026_01.pdf" />
     </item>
   </channel>
 </rss>"""

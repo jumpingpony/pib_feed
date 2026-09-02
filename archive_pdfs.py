@@ -89,6 +89,8 @@ def release_title(tag: str) -> str:
         return f"MyGov Archive {tag.split('-', 1)[1]}"
     if tag.startswith("niti-"):
         return f"NITI Aayog Archive {tag.split('-', 1)[1]}"
+    if tag == "indianexpress-delhi":
+        return "Indian Express Delhi"
     if tag.startswith("indianexpress-delhi-"):
         return f"Indian Express Delhi {tag.split('-', 2)[2]}"
     if tag.startswith("upsc-essentials-"):

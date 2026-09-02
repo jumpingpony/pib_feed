@@ -210,12 +210,53 @@ def parse_page(page: str) -> list[dict]:
     return out
 
 
+def fetch_detail(session: requests.Session, it: dict) -> None:
+    """Fetch article detail page to extract full body and direct publication PDF."""
+    text = fetch(session, it["link"])
+    if not text:
+        return
+
+    # Extract full body text
+    bm = re.search(r'<div class="footnote">(.*?)</div>\s*</div>', text, re.S)
+    if bm:
+        it["detail_body"] = bm.group(1).strip()
+    else:
+        im = re.search(r'<div class="[^"]*inner-content-area[^"]*">(.*?)<footer', text, re.S)
+        if im:
+            it["detail_body"] = im.group(1).strip()
+
+    # Extract direct publication PDF link
+    dm = re.search(r'<div class="donwload--pdfNew"[^>]*>.*?<a\s+[^>]*?href="([^"]+\.pdf)"', text, re.S | re.I)
+    if dm:
+        it["pdf"] = dm.group(1).strip()
+    else:
+        ignored_pdfs = {"moa-2021-v1.pdf", "fellowship-rules-amended_2011_compressed.pdf"}
+        for pdf_url in re.findall(r'href="([^"]+wp-content/uploads/[^"]+\.pdf)"', text, re.I):
+            base_name = pdf_url.split("/")[-1].lower()
+            if base_name not in ignored_pdfs:
+                it["pdf"] = pdf_url.strip()
+                break
+
+
 def build_body(it: dict) -> str:
     parts: list[str] = []
-    if it["summary"]:
-        parts.append(f"<p>{escape(it['summary'])}</p>")
-    if it["authors"]:
+
+    # Original publication date banner
+    if it.get("when"):
+        orig_date = it["when"].strftime("%Y-%m-%d")
+        parts.append(f'<p class="feed-orig-date"><strong>Original Publication Date:</strong> {orig_date}</p>')
+
+    if it.get("authors"):
         parts.append(f"<p><strong>Author(s):</strong> {escape(', '.join(it['authors']))}</p>")
+
+    if it.get("pdf"):
+        parts.append(f'<p><a href="{escape(it["pdf"])}">Download publication (PDF)</a></p>')
+
+    if it.get("detail_body"):
+        parts.append(it["detail_body"])
+    elif it.get("summary"):
+        parts.append(f"<p>{escape(it['summary'])}</p>")
+
     parts.append(f'<p><a href="{escape(it["link"])}">Read on MP-IDSA</a></p>')
     return "\n".join(parts)
 
@@ -260,6 +301,11 @@ def load_published(session: requests.Session, key: str) -> dict[str, tuple[dt.da
 def render_item(it: dict, when: dt.datetime) -> str:
     body = build_body(it)
     summary = clean(body)
+    encl = (
+        f'      <enclosure url="{escape(it["pdf"])}" type="application/pdf" />\n'
+        if it.get("pdf")
+        else ""
+    )
     return (
         "    <item>\n"
         f"      <title>{escape(xml_safe(it['title']))}</title>\n"
@@ -267,6 +313,7 @@ def render_item(it: dict, when: dt.datetime) -> str:
         f"      <guid isPermaLink=\"true\">{escape(it['link'])}</guid>\n"
         f"      <pubDate>{format_datetime(when)}</pubDate>\n"
         f"      <description>{escape(xml_safe(summary))}</description>\n"
+        f"{encl}"
         f"      <content:encoded><![CDATA[{cdata(body)}]]></content:encoded>\n"
         "    </item>"
     )
@@ -343,6 +390,8 @@ def run_feed(session: requests.Session, feed: dict, now: dt.datetime) -> int:
             elif not precise:
                 # year/month-only: keep strict listing order within the year
                 when = min(when, now) - dt.timedelta(seconds=rank)
+            it["when"] = when
+            fetch_detail(session, it)
             merged[it["link"]] = (when, render_item(it, when).strip())
             page_new += 1
             new_count += 1

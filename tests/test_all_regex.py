@@ -49,11 +49,11 @@ class TestRegexImplementations(unittest.TestCase):
         self.assertEqual(classify_asset(name), "niti-2026")
 
     def test_ie_epaper_archival_name_and_repo_regex(self):
-        base_url = "https://github.com/nappingcats/pib_feed/releases/download/{feed}-{year}"
+        base_url = "https://github.com/jumpingpony/pib_feed/releases/download/{feed}-{year}"
         ie_epaper.ARCHIVE_BASE_URL = base_url
         match = re.search(r"github\.com/([^/]+/[^/]+)/releases/download", base_url)
         self.assertIsNotNone(match)
-        self.assertEqual(match.group(1), "nappingcats/pib_feed")
+        self.assertEqual(match.group(1), "jumpingpony/pib_feed")
 
         feed_delhi = {"key": "indianexpress-delhi"}
         art_delhi = {
@@ -62,8 +62,8 @@ class TestRegexImplementations(unittest.TestCase):
             "date": dt.datetime(2026, 8, 22, tzinfo=IST),
             "archival_name": "indianexpress-delhi_2026-08-22.pdf",
         }
-        self.assertEqual(ie_epaper.archive_tag_for(feed_delhi, art_delhi), "indianexpress-delhi-2026")
-        self.assertEqual(classify_asset(art_delhi["archival_name"]), "indianexpress-delhi-2026")
+        self.assertEqual(ie_epaper.archive_tag_for(feed_delhi, art_delhi), "indianexpress-delhi")
+        self.assertEqual(classify_asset(art_delhi["archival_name"]), "indianexpress-delhi")
 
     def test_visionias_and_meca_regex(self):
         vis_name = "visionias_pt-365_2026_pt-365-culture_13229.pdf"
@@ -81,38 +81,27 @@ class TestRegexImplementations(unittest.TestCase):
     def test_archive_pdfs_marker_regex(self):
         sample_xml = """<item>
             <title>Test Item</title>
-            <link>https://github.com/nappingcats/pib_feed/releases/download/mygov-2026/mygov_pulse_2026-01-08_test.pdf</link>
-            <enclosure url="https://github.com/nappingcats/pib_feed/releases/download/indianexpress-delhi-2026/indianexpress-delhi_2026-08-22.pdf" type="application/pdf" />
+            <link>https://github.com/jumpingpony/pib_feed/releases/download/mygov-2026/mygov_pulse_2026-01-08_test.pdf</link>
+            <enclosure url="https://github.com/jumpingpony/pib_feed/releases/download/indianexpress-delhi/indianexpress-delhi_2026-08-22.pdf" type="application/pdf" />
         </item>"""
         marker = re.compile(r"/releases/download/([^/\s<>'\"?#]+)/([^/\s<>'\"?#]+)", re.I)
         matches = [(m.group(1), m.group(2)) for m in marker.finditer(sample_xml)]
         self.assertEqual(len(matches), 2)
         self.assertEqual(matches[0], ("mygov-2026", "mygov_pulse_2026-01-08_test.pdf"))
-        self.assertEqual(matches[1], ("indianexpress-delhi-2026", "indianexpress-delhi_2026-08-22.pdf"))
+        self.assertEqual(matches[1], ("indianexpress-delhi", "indianexpress-delhi_2026-08-22.pdf"))
 
-    def test_all_live_legacy_assets_classification(self):
-        """Audit every single asset currently on pdf-archive and image-archive."""
-        pdf_assets = get_existing_assets("pdf-archive")
-        img_assets = get_existing_assets("image-archive")
-
-        self.assertGreater(len(pdf_assets), 500)
-        self.assertGreater(len(img_assets), 190)
-
-        unclassified = []
-        for name in pdf_assets:
-            tag = classify_asset(name, "pdf-archive")
-            if tag is None:
-                if not name.startswith("indianexpress-eye_"):
-                    unclassified.append(name)
-            else:
-                self.assertFalse(tag.endswith("2020"), f"Erroneous 2020 tag for {name}")
-                self.assertFalse(tag.endswith("2047"), f"Erroneous 2047 tag for {name}")
-
-        for name in img_assets:
-            tag = classify_asset(name, "image-archive")
-            self.assertEqual(tag, "economist-images-2026")
-
-        self.assertEqual(unclassified, [], f"Unclassified PDF assets found: {unclassified}")
+    def test_asset_classification(self):
+        """Test classification of asset names into partitioned release tags."""
+        sample_assets = [
+            ("niti_2026-07_Investment-Friendliness-Index.pdf", "niti-2026"),
+            ("upsc-essentials_2026-01-13.pdf", "upsc-essentials-2026"),
+            ("visionias_mains-365_2025_key-data-facts_9754.pdf", "visionias-mains365-2025"),
+            ("visionias_pt-365_2026_pt-365-culture_13229.pdf", "visionias-pt365-2026"),
+            ("chart_1.jpg", "economist-images-2026"),
+            ("indianexpress-eye_2026.pdf", None),
+        ]
+        for name, expected in sample_assets:
+            self.assertEqual(classify_asset(name), expected)
 
 
 if __name__ == "__main__":

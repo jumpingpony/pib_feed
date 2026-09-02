@@ -5,7 +5,7 @@
   </head>
   <body>
       <outline text="Project Syndicate (unofficial, full-text)" title="Project Syndicate (unofficial, full-text)">
-        <outline type="rss" text="Commentaries - Project Syndicate" title="Commentaries - Project Syndicate" xmlUrl="https://nappingcats.github.io/pib_feed/project-syndicate/feed.xml" htmlUrl="https://www.project-syndicate.org/"/>
+        <outline type="rss" text="Commentaries - Project Syndicate" title="Commentaries - Project Syndicate" xmlUrl="https://jumpingpony.github.io/pib_feed/project-syndicate/feed.xml" htmlUrl="https://www.project-syndicate.org/"/>
       </outline>
   </body>
 </opml>

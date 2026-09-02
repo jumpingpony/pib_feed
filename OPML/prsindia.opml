@@ -5,9 +5,9 @@
   </head>
   <body>
       <outline text="PRS Legislative Research" title="PRS Legislative Research">
-        <outline type="rss" text="Bills - PRS" title="Bills - PRS" xmlUrl="https://nappingcats.github.io/pib_feed/prs-bills/feed.xml" htmlUrl="https://prsindia.org/billtrack"/>
-        <outline type="rss" text="Acts - PRS" title="Acts - PRS" xmlUrl="https://nappingcats.github.io/pib_feed/prs-acts/feed.xml" htmlUrl="https://prsindia.org/acts/parliament"/>
-        <outline type="rss" text="Budgets - PRS" title="Budgets - PRS" xmlUrl="https://nappingcats.github.io/pib_feed/prs-budgets/feed.xml" htmlUrl="https://prsindia.org/budgets/parliament"/>
+        <outline type="rss" text="Bills - PRS" title="Bills - PRS" xmlUrl="https://jumpingpony.github.io/pib_feed/prs-bills/feed.xml" htmlUrl="https://prsindia.org/billtrack"/>
+        <outline type="rss" text="Acts - PRS" title="Acts - PRS" xmlUrl="https://jumpingpony.github.io/pib_feed/prs-acts/feed.xml" htmlUrl="https://prsindia.org/acts/parliament"/>
+        <outline type="rss" text="Budgets - PRS" title="Budgets - PRS" xmlUrl="https://jumpingpony.github.io/pib_feed/prs-budgets/feed.xml" htmlUrl="https://prsindia.org/budgets/parliament"/>
       </outline>
   </body>
 </opml>

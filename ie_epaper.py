@@ -77,7 +77,7 @@ FEEDS = [
         "name": "UPSC Essentials",
         "title": "UPSC Essentials - Indian Express",
         "desc": "Unofficial feed of the UPSC Essentials magazine (Indian Express epaper) PDFs.",
-        "min_date": "2026-01-01",
+        "min_date": "2025-05-01",
         "max_items": 120,
     },
     {
@@ -87,8 +87,8 @@ FEEDS = [
         "name": "Delhi",
         "title": "Delhi Edition - Indian Express",
         "desc": "Unofficial feed of the daily Indian Express Delhi edition (epaper) PDFs.",
-        "min_date": "2026-06-01",
-        "max_items": 400,
+        "min_date": "2026-08-01",
+        "max_items": 180,
     },
 ]
 
@@ -221,6 +221,12 @@ def archive_base_for(feed: dict, art: dict) -> str:
         return ""
     year = art["date"].year if art.get("date") else dt.datetime.now(IST).year
     base = ARCHIVE_BASE_URL
+    if feed["key"] == "indianexpress-delhi":
+        # Rolling archive without year partition
+        base = re.sub(r"-\{year\}", "", base)
+        if "{feed}" in base:
+            return base.format(feed=feed["key"])
+        return base
     if "{feed}" in base:
         base = base.format(feed=feed["key"], year=year)
     elif "{year}" in base:

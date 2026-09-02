@@ -9,8 +9,8 @@ from scripts.backfill_releases import classify_asset, release_title
 
 class TestBackfillClassification(unittest.TestCase):
     def test_indianexpress_delhi(self):
-        self.assertEqual(classify_asset("indianexpress-delhi_2026-06-01.pdf"), "indianexpress-delhi-2026")
-        self.assertEqual(classify_asset("indianexpress-delhi_2025-12-31.pdf"), "indianexpress-delhi-2025")
+        self.assertEqual(classify_asset("indianexpress-delhi_2026-06-01.pdf"), "indianexpress-delhi")
+        self.assertEqual(classify_asset("indianexpress-delhi_2025-12-31.pdf"), "indianexpress-delhi")
 
     def test_upsc_essentials(self):
         self.assertEqual(classify_asset("upsc-essentials_2026-01-13.pdf"), "upsc-essentials-2026")

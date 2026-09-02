@@ -30,6 +30,7 @@ import html
 import os
 import re
 import sys
+import urllib.parse
 from email.utils import format_datetime, parsedate_to_datetime
 from xml.sax.saxutils import escape
 
@@ -65,6 +66,7 @@ FEEDS = [
         "bills": True,
         "pdf": False,
         "max_items": 500,
+        "min_year": 2025,
     },
     {
         "key": "prs-acts",
@@ -76,6 +78,7 @@ FEEDS = [
         "bills": False,
         "pdf": True,
         "max_items": 500,
+        "min_year": 2026,
     },
     {
         "key": "prs-budgets",
@@ -87,6 +90,7 @@ FEEDS = [
         "bills": False,
         "pdf": False,
         "max_items": 300,
+        "min_year": 2026,
     },
 ]
 
@@ -187,14 +191,59 @@ def collect(feed: dict, page: str) -> list[dict]:
     return out
 
 
+def fetch_detail(session: requests.Session, it: dict) -> None:
+    """Fetch detail page to populate full body and document links."""
+    text = fetch(session, it["link"])
+    if not text:
+        return
+
+    # Extract full body content and highlights
+    bm = re.search(
+        r'<div class="[^"]*field-name-body[^"]*">.*?<div class="field-item even"[^>]*>(.*?)</div>\s*</div>\s*</div>',
+        text,
+        re.S,
+    )
+    if bm:
+        it["detail_body"] = bm.group(1).strip()
+
+    # Extract ministry
+    mm = re.search(
+        r'<div class="[^"]*field-name-field-ministry[^"]*">.*?<div class="field-item even"[^>]*>(.*?)</div>',
+        text,
+        re.S,
+    )
+    if mm:
+        it["ministry"] = clean(mm.group(1))
+
+    # Extract attached document PDF if missing
+    if not it.get("pdf"):
+        pm = re.search(r'href="([^"]*?/files/[^"]*?\.pdf)"', text, re.I)
+        if pm:
+            it["pdf"] = urllib.parse.urljoin(BASE, pm.group(1))
+
+
 def build_body(feed: dict, it: dict) -> str:
     parts: list[str] = []
+
+    # Original publication date banner
+    if it.get("when"):
+        orig_date = it["when"].strftime("%Y-%m-%d")
+        parts.append(f'<p class="feed-orig-date"><strong>Original Publication Date:</strong> {orig_date}</p>')
+
+    if it.get("ministry"):
+        parts.append(f"<p><strong>Ministry:</strong> {escape(it['ministry'])}</p>")
+
     if it["status"]:
         parts.append(f"<p><strong>Status:</strong> {escape(it['status'])}</p>")
+
     if it["pdf"]:
         parts.append(f'<p><a href="{escape(it["pdf"])}">Download document (PDF)</a></p>')
-    else:
+
+    if it.get("detail_body"):
+        parts.append(it["detail_body"])
+    elif not it["pdf"]:
         parts.append(f'<p><a href="{escape(it["link"])}">Read on PRS India</a></p>')
+
     return "\n".join(parts)
 
 
@@ -323,10 +372,17 @@ def run_feed(session: requests.Session, feed: dict, now: dt.datetime) -> int:
         items = collect(feed, page)
         assign_dates(items, now)
         for it in items:
+            if it["year"] and it["year"] < feed.get("min_year", 2025):
+                continue
+
             if it["link"] in merged:
                 if feed["bills"]:
                     continue  # Bill Track is intentionally excluded from this optimization.
                 break  # newest-first listing has reached published history
+
+            if feed["key"] in ("prs-bills", "prs-budgets"):
+                fetch_detail(session, it)
+
             merged[it["link"]] = (it["when"], render_item(feed, it, it["when"]).strip())
     else:
         print(f"  {feed['key']}: listing fetch failed; keeping published only", file=sys.stderr)

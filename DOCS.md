@@ -6,12 +6,12 @@ each with **full article bodies**:
 
 | Feed | What | GitHub Pages |
 |------|------|------|
-| Press Releases | all English press releases | [feed.xml](https://nappingcats.github.io/pib_feed/press_releases/feed.xml) |
-| PMO | Prime Minister's Office releases | [feed.xml](https://nappingcats.github.io/pib_feed/pmo/feed.xml) |
-| Backgrounders | in-depth explainers | [feed.xml](https://nappingcats.github.io/pib_feed/backgrounders/feed.xml) |
-| Factsheets | concise fact briefs | [feed.xml](https://nappingcats.github.io/pib_feed/factsheets/feed.xml) |
-| Features | editorial features | [feed.xml](https://nappingcats.github.io/pib_feed/features/feed.xml) |
-| FAQs | explainer Q&As | [feed.xml](https://nappingcats.github.io/pib_feed/faqs/feed.xml) |
+| Press Releases | all English press releases | [feed.xml](https://jumpingpony.github.io/pib_feed/press_releases/feed.xml) |
+| PMO | Prime Minister's Office releases | [feed.xml](https://jumpingpony.github.io/pib_feed/pmo/feed.xml) |
+| Backgrounders | in-depth explainers | [feed.xml](https://jumpingpony.github.io/pib_feed/backgrounders/feed.xml) |
+| Factsheets | concise fact briefs | [feed.xml](https://jumpingpony.github.io/pib_feed/factsheets/feed.xml) |
+| Features | editorial features | [feed.xml](https://jumpingpony.github.io/pib_feed/features/feed.xml) |
+| FAQs | explainer Q&As | [feed.xml](https://jumpingpony.github.io/pib_feed/faqs/feed.xml) |
 
 The public landing page is intentionally blank; use the direct feed links above.
 
@@ -93,7 +93,7 @@ bulletins and news magazines, built by `newsonair_feed.py`:
 
 | Feed | What | GitHub Pages |
 |------|------|------|
-| News On AIR | Consolidated podcast & full transcripts (Morning News, Midday News, Evening News, Parikrama, Aaj Savere) | [feed.xml](https://nappingcats.github.io/pib_feed/newsonair/feed.xml) |
+| News On AIR | Consolidated podcast & full transcripts (Morning News, Midday News, Evening News, Parikrama, Aaj Savere) | [feed.xml](https://jumpingpony.github.io/pib_feed/newsonair/feed.xml) |
 
 ## Why this exists
 
@@ -145,10 +145,10 @@ NextIAS). Each item's body links the PDF; recent years' PDFs are also **archived
 
 | Feed | What | GitHub Pages |
 |------|------|------|
-| Vision IAS PT 365 | PT 365 PDFs, item titles `[YEAR \| title]`, newest year first | [feed.xml](https://nappingcats.github.io/pib_feed/visionias-pt-365/feed.xml) |
-| Vision IAS Mains 365 | Mains 365 PDFs, item titles `[YEAR \| title]`, newest year first | [feed.xml](https://nappingcats.github.io/pib_feed/visionias-mains-365/feed.xml) |
-| Made Easy Weekly CA | weekly current-affairs PDFs | [feed.xml](https://nappingcats.github.io/pib_feed/madeeasy-weekly/feed.xml) |
-| NextIAS Monthly CA | monthly current-affairs magazine PDFs | [feed.xml](https://nappingcats.github.io/pib_feed/nextias-magazine/feed.xml) |
+| Vision IAS PT 365 | PT 365 PDFs, item titles `[YEAR \| title]`, newest year first | [feed.xml](https://jumpingpony.github.io/pib_feed/visionias-pt-365/feed.xml) |
+| Vision IAS Mains 365 | Mains 365 PDFs, item titles `[YEAR \| title]`, newest year first | [feed.xml](https://jumpingpony.github.io/pib_feed/visionias-mains-365/feed.xml) |
+| Made Easy Weekly CA | weekly current-affairs PDFs | [feed.xml](https://jumpingpony.github.io/pib_feed/madeeasy-weekly/feed.xml) |
+| NextIAS Monthly CA | monthly current-affairs magazine PDFs | [feed.xml](https://jumpingpony.github.io/pib_feed/nextias-magazine/feed.xml) |
 
 ## How it works
 
@@ -251,9 +251,9 @@ the same PDF archival as the current-affairs feeds.
 
 | Feed | What | GitHub Pages |
 |------|------|------|
-| Bharat Matters | MyGov Bharat Matters ebooks | [feed.xml](https://nappingcats.github.io/pib_feed/mygov_bharat_matters/feed.xml) |
-| Pulse Newsletter | MyGov Pulse newsletter | [feed.xml](https://nappingcats.github.io/pib_feed/mygov_pulse/feed.xml) |
-| Read Mann Ki Baat | MyGov Read Mann Ki Baat | [feed.xml](https://nappingcats.github.io/pib_feed/mygov_mann_ki_baat/feed.xml) |
+| Bharat Matters | MyGov Bharat Matters ebooks | [feed.xml](https://jumpingpony.github.io/pib_feed/mygov_bharat_matters/feed.xml) |
+| Pulse Newsletter | MyGov Pulse newsletter | [feed.xml](https://jumpingpony.github.io/pib_feed/mygov_pulse/feed.xml) |
+| Read Mann Ki Baat | MyGov Read Mann Ki Baat | [feed.xml](https://jumpingpony.github.io/pib_feed/mygov_mann_ki_baat/feed.xml) |
 
 ## How it works
 
@@ -277,9 +277,9 @@ window).
 
 | Feed | What | GitHub Pages |
 |------|------|------|
-| Cases | matters tracked on the SCO case docket | [feed.xml](https://nappingcats.github.io/pib_feed/scobserver_cases/feed.xml) |
-| Journal | analysis / opinion articles | [feed.xml](https://nappingcats.github.io/pib_feed/scobserver-journal/feed.xml) |
-| Reports | per-day argument & hearing summaries (full text) | [feed.xml](https://nappingcats.github.io/pib_feed/scobserver-reports/feed.xml) |
+| Cases | matters tracked on the SCO case docket | [feed.xml](https://jumpingpony.github.io/pib_feed/scobserver_cases/feed.xml) |
+| Journal | analysis / opinion articles | [feed.xml](https://jumpingpony.github.io/pib_feed/scobserver-journal/feed.xml) |
+| Reports | per-day argument & hearing summaries (full text) | [feed.xml](https://jumpingpony.github.io/pib_feed/scobserver-reports/feed.xml) |
 
 ## Why this exists
 
@@ -332,9 +332,9 @@ tracks Indian bills, acts, budgets and parliamentary work — built by
 
 | Feed | What | GitHub Pages |
 |------|------|------|
-| Bills | bills tracked by PRS, with current status | [feed.xml](https://nappingcats.github.io/pib_feed/prs-bills/feed.xml) |
-| Acts | Acts of Parliament (PDF each) | [feed.xml](https://nappingcats.github.io/pib_feed/prs-acts/feed.xml) |
-| Budgets | union budget analyses | [feed.xml](https://nappingcats.github.io/pib_feed/prs-budgets/feed.xml) |
+| Bills | bills tracked by PRS, with current status | [feed.xml](https://jumpingpony.github.io/pib_feed/prs-bills/feed.xml) |
+| Acts | Acts of Parliament (PDF each) | [feed.xml](https://jumpingpony.github.io/pib_feed/prs-acts/feed.xml) |
+| Budgets | union budget analyses | [feed.xml](https://jumpingpony.github.io/pib_feed/prs-budgets/feed.xml) |
 
 ## Why this exists
 
@@ -384,10 +384,10 @@ RSS feeds for the [Manohar Parrikar Institute for Defence Studies and Analyses](
 
 | Feed | What | GitHub Pages |
 |------|------|------|
-| Comments | commentaries (IDSA Comments) | [feed.xml](https://nappingcats.github.io/pib_feed/idsa-comments/feed.xml) |
-| Issue Briefs | issue briefs | [feed.xml](https://nappingcats.github.io/pib_feed/idsa-issue-briefs/feed.xml) |
-| Monographs | monographs | [feed.xml](https://nappingcats.github.io/pib_feed/idsa-monographs/feed.xml) |
-| Backgrounders | backgrounders | [feed.xml](https://nappingcats.github.io/pib_feed/idsa-backgrounders/feed.xml) |
+| Comments | commentaries (IDSA Comments) | [feed.xml](https://jumpingpony.github.io/pib_feed/idsa-comments/feed.xml) |
+| Issue Briefs | issue briefs | [feed.xml](https://jumpingpony.github.io/pib_feed/idsa-issue-briefs/feed.xml) |
+| Monographs | monographs | [feed.xml](https://jumpingpony.github.io/pib_feed/idsa-monographs/feed.xml) |
+| Backgrounders | backgrounders | [feed.xml](https://jumpingpony.github.io/pib_feed/idsa-backgrounders/feed.xml) |
 
 ## Why this exists
 
@@ -437,7 +437,7 @@ RSS feeds for the [Economic Advisory Council to the Prime Minister](https://eacp
 
 | Feed | What | GitHub Pages |
 |------|------|------|
-| Reports | reports, working papers and monographs — items link directly to the PDFs | [feed.xml](https://nappingcats.github.io/pib_feed/eacpm-reports/feed.xml) |
+| Reports | reports, working papers and monographs — items link directly to the PDFs | [feed.xml](https://jumpingpony.github.io/pib_feed/eacpm-reports/feed.xml) |
 
 ## Why this exists
 
@@ -490,8 +490,8 @@ two free titles; add rows to its `FEEDS` list for more.
 
 | Feed | Content | Link |
 | --- | --- | --- |
-| UPSC Essentials | full magazine PDFs, Jan 2026 on | [feed.xml](https://nappingcats.github.io/pib_feed/upsc-essentials/feed.xml) |
-| Delhi Edition | daily newspaper PDFs, Jun 2026 on | [feed.xml](https://nappingcats.github.io/pib_feed/indianexpress-delhi/feed.xml) |
+| UPSC Essentials | full magazine PDFs, Jan 2026 on | [feed.xml](https://jumpingpony.github.io/pib_feed/upsc-essentials/feed.xml) |
+| Delhi Edition | daily newspaper PDFs, Jun 2026 on | [feed.xml](https://jumpingpony.github.io/pib_feed/indianexpress-delhi/feed.xml) |
 
 ## How it works
 
@@ -544,7 +544,7 @@ asset is missing. The release inventory is read once with `gh`; CI supplies its
 
 | Feed | Content | Link |
 | --- | --- | --- |
-| Magazine - India Today | full-text weekly magazine articles | [feed.xml](https://nappingcats.github.io/pib_feed/indiatoday_magazine/feed.xml) |
+| Magazine - India Today | full-text weekly magazine articles | [feed.xml](https://jumpingpony.github.io/pib_feed/indiatoday_magazine/feed.xml) |
 
 ## How it works
 
@@ -600,8 +600,8 @@ two feeds are disjoint by path, so nothing is duplicated between them:
 
 | Feed | Content | Link |
 | --- | --- | --- |
-| Magazine - Frontline | the fortnightly print issue's articles | [feed.xml](https://nappingcats.github.io/pib_feed/frontline_magazine/feed.xml) |
-| Digital Exclusives - Frontline | web-only pieces under `/blog/` | [feed.xml](https://nappingcats.github.io/pib_feed/frontline_blog/feed.xml) |
+| Magazine - Frontline | the fortnightly print issue's articles | [feed.xml](https://jumpingpony.github.io/pib_feed/frontline_magazine/feed.xml) |
+| Digital Exclusives - Frontline | web-only pieces under `/blog/` | [feed.xml](https://jumpingpony.github.io/pib_feed/frontline_blog/feed.xml) |
 
 **Why two feeds.** *Frontline*'s digital exclusives are the same editorial team's
 long-form journalism, just published between issues rather than in the print
@@ -660,11 +660,11 @@ asset (falling back to the source PDF when archival is off).
 
 | Feed | Content | Link |
 | --- | --- | --- |
-| Division Reports - NITI Aayog | division/policy reports, tagged by division | [feed.xml](https://nappingcats.github.io/pib_feed/niti-reports/feed.xml) |
-| Working Papers - NITI Aayog | working papers | [feed.xml](https://nappingcats.github.io/pib_feed/niti-working-papers/feed.xml) |
-| Research Papers - NITI Aayog | research papers (with author) | [feed.xml](https://nappingcats.github.io/pib_feed/niti-research-papers/feed.xml) |
-| Policy Papers - NITI Aayog | policy papers (with author) | [feed.xml](https://nappingcats.github.io/pib_feed/niti-policy-papers/feed.xml) |
-| Annual Reports - NITI Aayog | annual reports (English + Hindi) | [feed.xml](https://nappingcats.github.io/pib_feed/niti-annual-reports/feed.xml) |
+| Division Reports - NITI Aayog | division/policy reports, tagged by division | [feed.xml](https://jumpingpony.github.io/pib_feed/niti-reports/feed.xml) |
+| Working Papers - NITI Aayog | working papers | [feed.xml](https://jumpingpony.github.io/pib_feed/niti-working-papers/feed.xml) |
+| Research Papers - NITI Aayog | research papers (with author) | [feed.xml](https://jumpingpony.github.io/pib_feed/niti-research-papers/feed.xml) |
+| Policy Papers - NITI Aayog | policy papers (with author) | [feed.xml](https://jumpingpony.github.io/pib_feed/niti-policy-papers/feed.xml) |
+| Annual Reports - NITI Aayog | annual reports (English + Hindi) | [feed.xml](https://jumpingpony.github.io/pib_feed/niti-annual-reports/feed.xml) |
 
 ## How it works
 
@@ -716,11 +716,11 @@ Full-text RSS feeds for [The Economist](https://www.economist.com), built by
 
 | Feed | What | GitHub Pages |
 |------|------|------|
-| Business | the weekly Business section articles | [feed.xml](https://nappingcats.github.io/pib_feed/economist-business/feed.xml) |
-| By Invitation | guest commentary from outside contributors | [feed.xml](https://nappingcats.github.io/pib_feed/economist-by-invitation/feed.xml) |
-| Finance & economics | the weekly Finance & economics articles | [feed.xml](https://nappingcats.github.io/pib_feed/economist-finance-and-economics/feed.xml) |
-| Economic & financial indicators | the weekly economic-data & chart pages | [feed.xml](https://nappingcats.github.io/pib_feed/economist-indicators/feed.xml) |
-| Podcasts | direct MP3 enclosures and complete transcripts | [feed.xml](https://nappingcats.github.io/pib_feed/economist-podcasts/feed.xml) |
+| Business | the weekly Business section articles | [feed.xml](https://jumpingpony.github.io/pib_feed/economist-business/feed.xml) |
+| By Invitation | guest commentary from outside contributors | [feed.xml](https://jumpingpony.github.io/pib_feed/economist-by-invitation/feed.xml) |
+| Finance & economics | the weekly Finance & economics articles | [feed.xml](https://jumpingpony.github.io/pib_feed/economist-finance-and-economics/feed.xml) |
+| Economic & financial indicators | the weekly economic-data & chart pages | [feed.xml](https://jumpingpony.github.io/pib_feed/economist-indicators/feed.xml) |
+| Podcasts | direct MP3 enclosures and complete transcripts | [feed.xml](https://jumpingpony.github.io/pib_feed/economist-podcasts/feed.xml) |
 
 ## Why this exists
 
@@ -789,7 +789,7 @@ built by `project_syndicate.py`.
 
 | Feed | What | GitHub Pages |
 |------|------|------|
-| Commentaries | full-text Project Syndicate commentaries | [feed.xml](https://nappingcats.github.io/pib_feed/project-syndicate/feed.xml) |
+| Commentaries | full-text Project Syndicate commentaries | [feed.xml](https://jumpingpony.github.io/pib_feed/project-syndicate/feed.xml) |
 
 ## Why this exists
 
@@ -837,8 +837,8 @@ above.)
 
 | Feed | What | GitHub Pages |
 |------|------|------|
-| Explained | full-text of the Explained section | [feed.xml](https://nappingcats.github.io/pib_feed/indianexpress-explained/feed.xml) |
-| Opinion | full-text of the Opinion section | [feed.xml](https://nappingcats.github.io/pib_feed/indianexpress-opinion/feed.xml) |
+| Explained | full-text of the Explained section | [feed.xml](https://jumpingpony.github.io/pib_feed/indianexpress-explained/feed.xml) |
+| Opinion | full-text of the Opinion section | [feed.xml](https://jumpingpony.github.io/pib_feed/indianexpress-opinion/feed.xml) |
 
 ## Why this exists
 
@@ -883,7 +883,7 @@ An RSS feed for the
 
 | Feed | What | GitHub Pages |
 |------|------|------|
-| Commentaries | full-text IPCS commentaries | [feed.xml](https://nappingcats.github.io/pib_feed/ipcs-commentaries/feed.xml) |
+| Commentaries | full-text IPCS commentaries | [feed.xml](https://jumpingpony.github.io/pib_feed/ipcs-commentaries/feed.xml) |
 
 ## Why this exists
 
@@ -928,7 +928,7 @@ A full-text RSS feed of the **latest 50 explainers** from
 
 | Feed | What | GitHub Pages |
 |------|------|------|
-| India's World — Explainers | latest 50 full-text explainers | [feed.xml](https://nappingcats.github.io/pib_feed/indiasworld/feed.xml) |
+| India's World — Explainers | latest 50 full-text explainers | [feed.xml](https://jumpingpony.github.io/pib_feed/indiasworld/feed.xml) |
 
 ## Why this exists
 

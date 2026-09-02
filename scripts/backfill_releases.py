@@ -25,7 +25,7 @@ from typing import Optional
 
 import requests
 
-REPO = os.environ.get("GITHUB_REPOSITORY", "nappingcats/pib_feed")
+REPO = os.environ.get("GITHUB_REPOSITORY", "jumpingpony/pib_feed")
 LEGACY_PDF_TAG = "pdf-archive"
 LEGACY_IMG_TAG = "image-archive"
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.7922.76 Safari/537.36"
@@ -69,7 +69,7 @@ def classify_asset(name: str, source_release: str = LEGACY_PDF_TAG) -> Optional[
     # Indian Express Delhi
     m = re.search(r"indianexpress-delhi_(\d{4})", name)
     if m:
-        return f"indianexpress-delhi-{m.group(1)}"
+        return "indianexpress-delhi"
 
     # UPSC Essentials
     m = re.search(r"upsc-essentials_(\d{4})", name)
@@ -125,6 +125,8 @@ def release_title(tag: str) -> str:
         return f"MyGov Archive {tag.split('-', 1)[1]}"
     if tag.startswith("niti-"):
         return f"NITI Aayog Archive {tag.split('-', 1)[1]}"
+    if tag == "indianexpress-delhi":
+        return "Indian Express Delhi"
     if tag.startswith("indianexpress-delhi-"):
         return f"Indian Express Delhi {tag.split('-', 2)[2]}"
     if tag.startswith("upsc-essentials-"):

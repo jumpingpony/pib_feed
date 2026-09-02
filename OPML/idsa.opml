@@ -5,10 +5,10 @@
   </head>
   <body>
       <outline text="MP-IDSA (Institute for Defence Studies and Analyses)" title="MP-IDSA (Institute for Defence Studies and Analyses)">
-        <outline type="rss" text="Comments - MP-IDSA" title="Comments - MP-IDSA" xmlUrl="https://nappingcats.github.io/pib_feed/idsa-comments/feed.xml" htmlUrl="https://idsa.in/publication-type/comments"/>
-        <outline type="rss" text="Issue Briefs - MP-IDSA" title="Issue Briefs - MP-IDSA" xmlUrl="https://nappingcats.github.io/pib_feed/idsa-issue-briefs/feed.xml" htmlUrl="https://idsa.in/publication-type/issuebrief"/>
-        <outline type="rss" text="Monographs - MP-IDSA" title="Monographs - MP-IDSA" xmlUrl="https://nappingcats.github.io/pib_feed/idsa-monographs/feed.xml" htmlUrl="https://idsa.in/publication-type/monograph"/>
-        <outline type="rss" text="Backgrounders - MP-IDSA" title="Backgrounders - MP-IDSA" xmlUrl="https://nappingcats.github.io/pib_feed/idsa-backgrounders/feed.xml" htmlUrl="https://idsa.in/publication-type/backgrounder"/>
+        <outline type="rss" text="Comments - MP-IDSA" title="Comments - MP-IDSA" xmlUrl="https://jumpingpony.github.io/pib_feed/idsa-comments/feed.xml" htmlUrl="https://idsa.in/publication-type/comments"/>
+        <outline type="rss" text="Issue Briefs - MP-IDSA" title="Issue Briefs - MP-IDSA" xmlUrl="https://jumpingpony.github.io/pib_feed/idsa-issue-briefs/feed.xml" htmlUrl="https://idsa.in/publication-type/issuebrief"/>
+        <outline type="rss" text="Monographs - MP-IDSA" title="Monographs - MP-IDSA" xmlUrl="https://jumpingpony.github.io/pib_feed/idsa-monographs/feed.xml" htmlUrl="https://idsa.in/publication-type/monograph"/>
+        <outline type="rss" text="Backgrounders - MP-IDSA" title="Backgrounders - MP-IDSA" xmlUrl="https://jumpingpony.github.io/pib_feed/idsa-backgrounders/feed.xml" htmlUrl="https://idsa.in/publication-type/backgrounder"/>
       </outline>
   </body>
 </opml>
