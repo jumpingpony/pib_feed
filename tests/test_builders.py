@@ -313,6 +313,59 @@ class TestNewsOnAirPodcast(unittest.TestCase):
         self.assertIn("<itunes:type>episodic</itunes:type>", xml)
         self.assertIn("<itunes:explicit>no</itunes:explicit>", xml)
 
+    def test_parse_transcript_lists_and_blocks(self):
+        sample_html = """
+        <p>Opening paragraph.</p>
+        <ol>
+          <li><span><strong>First headline item</strong><br /></span></li>
+          <li><strong>Second headline with stray p<p></strong></li>
+        </ol>
+        <p>Mid paragraph.</p>
+        <ul>
+          <li>History bullet point 1</li>
+          <li>History bullet point 2</li>
+        </ul>
+        <h3>Segment Heading</h3>
+        <blockquote>Quoted statement</blockquote>
+        """
+        parsed = newsonair_feed.parse_transcript(sample_html)
+        self.assertIn("<p>Opening paragraph.</p>", parsed)
+        self.assertIn("<ol>\n<li>First headline item</li>\n<li>Second headline with stray p</li>\n</ol>", parsed)
+        self.assertIn("<p>Mid paragraph.</p>", parsed)
+        self.assertIn("<ul>\n<li>History bullet point 1</li>\n<li>History bullet point 2</li>\n</ul>", parsed)
+        self.assertIn("<h3>Segment Heading</h3>", parsed)
+        self.assertIn("<blockquote><p>Quoted statement</p></blockquote>", parsed)
+
+    def test_scrape_bulletin_includes_lists(self):
+        cat_info = newsonair_feed.CATEGORIES["morning-news"]
+        mock_html = """
+        <html>
+        <body>
+          <span class="detail-date">September 03, 2026 08:30 AM</span>
+          <div class="entry-content">
+            <p>Intro news.</p>
+            <ol>
+              <li>Headline 1</li>
+              <li>Headline 2</li>
+            </ol>
+            <p>Outro news.</p>
+          </div>
+          <!-- .entry-content -->
+        </body>
+        </html>
+        """
+        mock_session = MagicMock()
+        with patch("newsonair_feed.fetch", return_value=mock_html):
+            bulletin = newsonair_feed.scrape_bulletin(
+                mock_session,
+                cat_info,
+                "https://newsonair.gov.in/bulletins-detail/morning-news-100/",
+            )
+        self.assertIsNotNone(bulletin)
+        self.assertIn("<ol>\n<li>Headline 1</li>\n<li>Headline 2</li>\n</ol>", bulletin["body_html"])
+        self.assertIn("<p>Intro news.</p>", bulletin["body_html"])
+        self.assertIn("<p>Outro news.</p>", bulletin["body_html"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -43,6 +43,8 @@ DELAY = float(os.environ.get("NOA_DELAY", "0.3"))
 RETRY_GAP = 1.0
 OUT_DIR = os.environ.get("NOA_OUT_DIR", "public")
 PUBLISHED_BASE_URL = os.environ.get("NOA_PUBLISHED_BASE_URL", "").strip().rstrip("/")
+REFRESH_RECENT = int(os.environ.get("NOA_REFRESH_RECENT", "20"))
+SCAN_COUNT = int(os.environ.get("NOA_SCAN_COUNT", os.environ.get("NOA_BULLETIN_PAGES", "20")))
 
 FEED_KEY = "newsonair"
 FEED_TITLE = "News On AIR - All India Radio"
@@ -294,6 +296,14 @@ BULLETIN_END_RE = re.compile(
 DETAIL_DATE_RE = re.compile(
     r"([A-Z][a-z]+)\s+(\d{1,2}),\s+(\d{4})\s+(\d{1,2}):(\d{2})\s*([AP]M)"
 )
+BLOCK_RE = re.compile(
+    r"<ol\b[^>]*>(?P<ol>.*?)</ol>"
+    r"|<ul\b[^>]*>(?P<ul>.*?)</ul>"
+    r"|<h(?P<hlvl>[1-6])\b[^>]*>(?P<h>.*?)</h(?P=hlvl)>"
+    r"|<blockquote\b[^>]*>(?P<bq>.*?)</blockquote>"
+    r"|<p\b[^>]*>(?P<p>.*?)</p>",
+    re.S | re.I,
+)
 
 
 def _parse_detail_date(page: str) -> dt.datetime | None:
@@ -307,6 +317,58 @@ def _parse_detail_date(page: str) -> dt.datetime | None:
         return base.replace(hour=hour, minute=int(mm), tzinfo=IST)
     except ValueError:
         return None
+
+
+def _extract_list_items(content: str) -> list[str]:
+    """Extract and sanitize individual <li> items from list markup."""
+    items: list[str] = []
+    for raw in re.split(r"<li\b[^>]*>", content, flags=re.I)[1:]:
+        raw = re.sub(r"</li\b.*$", "", raw, flags=re.S | re.I)
+        txt = html.unescape(TAG_RE.sub(" ", raw)).strip()
+        txt = re.sub(r"[ \t]+", " ", txt)
+        if txt:
+            items.append(f"<li>{escape(txt)}</li>")
+    return items
+
+
+def parse_transcript(inner: str) -> str:
+    """Extract clean semantic HTML transcript blocks in document order."""
+    blocks: list[str] = []
+    for m in BLOCK_RE.finditer(inner):
+        if m.group("ol") is not None:
+            lis = _extract_list_items(m.group("ol"))
+            if lis:
+                blocks.append("<ol>\n" + "\n".join(lis) + "\n</ol>")
+            continue
+
+        if m.group("ul") is not None:
+            lis = _extract_list_items(m.group("ul"))
+            if lis:
+                blocks.append("<ul>\n" + "\n".join(lis) + "\n</ul>")
+            continue
+
+        if m.group("h") is not None:
+            txt = html.unescape(TAG_RE.sub(" ", m.group("h"))).strip()
+            txt = re.sub(r"[ \t]+", " ", txt)
+            if txt:
+                lvl = m.group("hlvl")
+                blocks.append(f"<h{lvl}>{escape(txt)}</h{lvl}>")
+            continue
+
+        if m.group("bq") is not None:
+            txt = html.unescape(TAG_RE.sub(" ", m.group("bq"))).strip()
+            txt = re.sub(r"[ \t]+", " ", txt)
+            if txt:
+                blocks.append(f"<blockquote><p>{escape(txt)}</p></blockquote>")
+            continue
+
+        if m.group("p") is not None:
+            txt = html.unescape(TAG_RE.sub(" ", m.group("p"))).strip()
+            txt = re.sub(r"[ \t]+", " ", txt)
+            if txt:
+                blocks.append(f"<p>{escape(txt)}</p>")
+
+    return "\n".join(blocks).strip()
 
 
 def scrape_bulletin(
@@ -326,15 +388,10 @@ def scrape_bulletin(
     inner = re.sub(r"<script\b.*?</script>", "", inner, flags=re.S | re.I)
     inner = re.sub(r"<style\b.*?</style>", "", inner, flags=re.S | re.I)
 
-    paras = [
-        html.unescape(TAG_RE.sub(" ", p)).strip()
-        for p in re.findall(r"<p[^>]*>(.*?)</p>", inner, re.S)
-    ]
-    paras = [p for p in paras if p]
-    if not paras:
+    body_html = parse_transcript(inner)
+    if not body_html:
         return None
 
-    body_html = "".join(f"<p>{escape(p)}</p>\n" for p in paras).strip()
     date = _parse_detail_date(page)
     day = date.strftime("%d %b %Y") if date else ""
     label = cat_info["label"]
@@ -367,7 +424,11 @@ def discover_bulletin_urls(
             latest_id = int(m.group(1))
 
     if latest_id is not None:
-        start_id = (newest_id + 1) if (newest_id > 0) else max(1, latest_id - 20)
+        start_id = (
+            (newest_id + 1)
+            if (newest_id > 0)
+            else max(1, latest_id - SCAN_COUNT + 1)
+        )
         return [
             f"{BASE}/bulletins-detail/{slug}-{b_id}/"
             for b_id in range(start_id, latest_id + 1)
@@ -394,9 +455,15 @@ def collect_bulletins(
         if (m := re.search(rf"/bulletins-detail/{slug}-(\d+)/", url))
     ]
     newest_id = max(pub_ids, default=0)
+    effective_id = (
+        max(0, newest_id - REFRESH_RECENT)
+        if (REFRESH_RECENT > 0 and newest_id > 0)
+        else newest_id
+    )
+    candidate_urls = discover_bulletin_urls(session, slug, effective_id)
     pending = [
-        u for u in discover_bulletin_urls(session, slug, newest_id)
-        if u not in published_urls
+        u for u in candidate_urls
+        if REFRESH_RECENT > 0 or u not in published_urls
     ]
     print(
         f"  {slug}: newest published #{newest_id}, "
