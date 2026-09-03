@@ -16,6 +16,7 @@ on:
       - prsindia.py
       - idsa.py
       - eacpm.py
+      - economist.py
       - project_syndicate.py
       - indianexpress.py
       - ie_epaper.py
@@ -136,6 +137,13 @@ jobs:
           EACPM_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
         run: python eacpm.py
 
+      - name: Build The Economist feeds
+        id: economist
+        continue-on-error: true
+        env:
+          ECON_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+        run: python economist.py
+
       - name: Build Project Syndicate feed
         id: project_syndicate
         continue-on-error: true
@@ -235,6 +243,7 @@ jobs:
             [PRSIndia]="${{ steps.prsindia.outcome }}"
             [MP-IDSA]="${{ steps.idsa.outcome }}"
             [EAC-PM]="${{ steps.eacpm.outcome }}"
+            [Economist]="${{ steps.economist.outcome }}"
             [ProjectSyndicate]="${{ steps.project_syndicate.outcome }}"
             [IndianExpress]="${{ steps.indianexpress.outcome }}"
             [IE-epaper]="${{ steps.ie_epaper.outcome }}"

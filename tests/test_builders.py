@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 import datetime as dt
+import json
 import os
 import re
 import sys
 import unittest
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import economist
@@ -173,6 +175,42 @@ class TestBuildersUrlTemplating(unittest.TestCase):
         self.assertEqual(len(manifest), 1)
         self.assertEqual(manifest[0]["tag"], f"economist-images-{now_year}")
         self.assertEqual(manifest[0]["name"], "20260321_FBP001.jpg")
+
+
+class TestEconomistBuilder(unittest.TestCase):
+    def test_extract_build_id(self):
+        sample = '<script id="__NEXT_DATA__" type="application/json">{"buildId":"abc-123","props":{}}</script>'
+        self.assertEqual(economist.extract_build_id(sample), "abc-123")
+        self.assertIsNone(economist.extract_build_id("<html>no data</html>"))
+
+    def test_article_data_url(self):
+        url = "https://www.economist.com/finance-and-economics/2026/09/02/central-banking?ref=rss"
+        expected = "https://www.economist.com/_next/data/test-id/finance-and-economics/2026/09/02/central-banking.json"
+        self.assertEqual(economist.article_data_url("test-id", url), expected)
+
+    def test_fetch_article_next_data(self):
+        mock_session = MagicMock()
+        mock_payload = {
+            "pageProps": {
+                "content": {
+                    "headline": "Test Title",
+                    "body": [{"type": "PARAGRAPH", "textHtml": "<p>Body text</p>"}],
+                }
+            }
+        }
+        with patch("economist.fetch", return_value=json.dumps(mock_payload)):
+            content = economist.fetch_article(mock_session, "https://www.economist.com/test", "test-id")
+            self.assertIsNotNone(content)
+            self.assertEqual(content.get("headline"), "Test Title")
+
+    def test_fetch_article_fallback(self):
+        mock_session = MagicMock()
+        html_payload = '<script id="__NEXT_DATA__">{"props":{"pageProps":{"content":{"headline":"Fallback Title"}}}}</script>'
+        # First call for data_url fails, second call for HTML page succeeds
+        with patch("economist.fetch", side_effect=[None, html_payload]):
+            content = economist.fetch_article(mock_session, "https://www.economist.com/test", "test-id")
+            self.assertIsNotNone(content)
+            self.assertEqual(content.get("headline"), "Fallback Title")
 
 
 class TestNewsOnAirPodcast(unittest.TestCase):

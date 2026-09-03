@@ -708,45 +708,18 @@ python niti.py && python archive_pdfs.py
 
 ---
 
-# The Economist feeds (disabled)
+# The Economist feeds — full-text (unofficial)
 
-The Economist feeds are currently disabled and omitted from publication.
+Full-text RSS feeds for [The Economist](https://www.economist.com), built by
+`economist.py`:
 
-## Why this exists
-
-The Economist is doubly locked down: Cloudflare fronts the whole site with a
-JavaScript challenge (plain `requests` / spoofed bot UAs get 403), and the
-articles sit behind the Zephr paywall. There is no usable full-text feed.
-
-## How it works
-
-Both walls are cleared with a single trick from the Bypass-Paywalls-Clean rule
-for economist.com — a custom mobile User-Agent whose tail token (`Liskov`) the
-site treats as a whitelisted crawler; with it a plain GET returns 200 and the
-**full** article payload. The site is a Next.js app, so each page embeds a
-`<script id="__NEXT_DATA__">` JSON blob: listing pages expose `content.articles`
-(headline, url, ISO date, image); article pages expose `content.body` as typed
-components (PARAGRAPH with ready `textHtml`, IMAGE with caption/credit), from
-which the body is rebuilt.
-
-`content-assets` images are Cloudflare-protected too, so a reader can't hotlink
-them. In archive mode (`ECON_ARCHIVE_MODE=archive` + `ECON_ARCHIVE_BASE_URL`)
-each body image is rewritten to a durable copy on a GitHub Release and recorded
-in a manifest under `ECON_ARCHIVE_MANIFEST_DIR`; `archive_pdfs.py` (run with the
-Liskov UA) does the mirroring. This uses a **separate** manifest dir + release
-tag (`image-archive`) from the PDF feeds. Each feed merges its previously
-published copy so history survives past the ~12-item scan window. Every run
-also retries incomplete items among the five newest entries and replaces a
-fallback once the full body becomes available.
-
-Podcast detail payloads expose the direct MP3 under `content.podcast.audio.url`,
-official square cover artwork under `content.podcast.imageUrl`, and speaker-and-timestamp transcript components under
-`content.podcast.transcript.body`. The feed publishes the MP3 as an RSS
-`enclosure`, embeds the show-specific 1:1 square cover art (`1400×1400` / `3000×3000` standard)
-in `<itunes:image>`, prefixes titles with `[Show Name]` for rapid skimming, tags
-`<category>` and `<itunes:author>`, and renders every transcript component in `content:encoded`.
-Narrated Editor's Picks episodes have no separate transcript; their show notes
-link to the source article, whose complete Liskov-exposed body is used instead.
+| Feed | What | GitHub Pages |
+|------|------|------|
+| Business | the weekly Business section articles | [feed.xml](https://jumpingpony.github.io/pib_feed/economist-business/feed.xml) |
+| By Invitation | guest commentary from outside contributors | [feed.xml](https://jumpingpony.github.io/pib_feed/economist-by-invitation/feed.xml) |
+| Finance & economics | the weekly Finance & economics articles | [feed.xml](https://jumpingpony.github.io/pib_feed/economist-finance-and-economics/feed.xml) |
+| Economic & financial indicators | the weekly economic-data & chart pages | [feed.xml](https://jumpingpony.github.io/pib_feed/economist-indicators/feed.xml) |
+| Podcasts | direct MP3 enclosures and complete transcripts | [feed.xml](https://jumpingpony.github.io/pib_feed/economist-podcasts/feed.xml) |
 
 ## Configuration (env vars)
 
@@ -762,12 +735,7 @@ The feed list is the `FEEDS` table in `economist.py`.
 
 ## Caveats
 
-- Depends on the Liskov-UA whitelist and the `__NEXT_DATA__` shape; if either
-  changes, the extractor needs rework.
-- Interactive "primers" carry no `__NEXT_DATA__` body and degrade to teaser
-  image + rubric + link.
-- A podcast remains in the feed when its MP3 or transcript is temporarily
-  unavailable, and the newest incomplete entries are retried on later runs.
+- Interactive primers degrade to teaser image + rubric + link.
 - Unofficial and unaffiliated; content © The Economist.
 
 ---

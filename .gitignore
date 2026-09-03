@@ -5,3 +5,6 @@ public/
 archive/
 image_archive/
 scratch/
+scripts/
+.inoreaderconfig
+*.inoreaderconfig

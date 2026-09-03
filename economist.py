@@ -185,6 +185,54 @@ def page_content(page: str) -> dict | None:
     return c if isinstance(c, dict) else None
 
 
+def extract_build_id(page: str) -> str | None:
+    # Read buildId from embedded __NEXT_DATA__ JSON
+    data = next_data(page)
+    if not data:
+        return None
+    build_id = data.get("buildId")
+    return str(build_id).strip() if build_id else None
+
+
+def resolve_build_id(session: requests.Session, page: str | None = None) -> str | None:
+    # Reuse buildId from listing page or fetch homepage
+    if page:
+        build_id = extract_build_id(page)
+        if build_id:
+            return build_id
+    home = fetch(session, BASE)
+    return extract_build_id(home) if home else None
+
+
+def article_data_url(build_id: str, url: str) -> str:
+    # Construct Next.js data endpoint without query params
+    path = urlsplit(url).path.strip("/")
+    return f"{BASE}/_next/data/{build_id}/{path}.json"
+
+
+def fetch_article(
+    session: requests.Session,
+    url: str,
+    build_id: str | None = None,
+) -> dict | None:
+    # Query Next.js data route to bypass DataDome HTML challenges
+    if build_id:
+        data_url = article_data_url(build_id, url)
+        raw = fetch(session, data_url)
+        if raw:
+            try:
+                payload = json.loads(raw)
+                content = (payload.get("pageProps") or {}).get("content")
+                if isinstance(content, list):
+                    content = content[0] if content else None
+                if isinstance(content, dict):
+                    return content
+            except ValueError:
+                pass
+    detail = fetch(session, url)
+    return page_content(detail) if detail else None
+
+
 # --- xml safety ---------------------------------------------------------------
 XML_ILLEGAL_RE = re.compile(
     "[^\x09\x0a\x0d\x20-퟿-�\U00010000-\U0010ffff]"
@@ -691,6 +739,7 @@ def build_podcast_item(
     content: dict,
     manifest: list[dict],
     now: dt.datetime,
+    build_id: str | None = None,
 ) -> tuple[dt.datetime, str]:
     podcast = content.get("podcast") or {}
     audio = podcast.get("audio") or {}
@@ -731,8 +780,7 @@ def build_podcast_item(
     source_url = ""
     if not transcript_html:
         source_url = podcast_source_article(content)
-        source_page = fetch(session, source_url) if source_url else None
-        source_content = page_content(source_page) if source_page else None
+        source_content = fetch_article(session, source_url, build_id) if source_url else None
         if source_content:
             transcript_html, transcript_summary = render_body(source_content, manifest)
     if transcript_html:
@@ -796,12 +844,12 @@ def build_item(
     it: dict,
     manifest: list[dict],
     now: dt.datetime,
+    build_id: str | None = None,
 ) -> tuple[dt.datetime, str]:
     """Fetch a detail page and render a full item; fall back gracefully."""
-    detail = fetch(session, it["link"])
-    content = page_content(detail) if detail else None
+    content = fetch_article(session, it["link"], build_id)
     if FEEDS[key].get("kind") == "podcast" and content:
-        return build_podcast_item(session, it, content, manifest, now)
+        return build_podcast_item(session, it, content, manifest, now, build_id)
     body_html, summary = ("", "")
     if content:
         body_html, summary = render_body(content, manifest)
@@ -831,6 +879,7 @@ def run_feed(session: requests.Session, key: str, manifest: list[dict], now: dt.
     print(f"[{key}]")
     merged = load_published(session, key)
     page = fetch(session, FEEDS[key]["page"])
+    build_id = resolve_build_id(session, page)
     listing = parse_listing(page) if page else []
     print(f"  listing: {len(listing)} articles")
     listing_by_link = {it["link"]: it for it in listing}
@@ -847,7 +896,7 @@ def run_feed(session: requests.Session, key: str, manifest: list[dict], now: dt.
             it["date"] is None or it["date"] < newest_published
         ):
             continue
-        when, block = build_item(session, key, it, manifest, now)
+        when, block = build_item(session, key, it, manifest, now, build_id)
         merged[it["link"]] = (when, block)
         attempted.add(it["link"])
         new += 1
@@ -864,7 +913,7 @@ def run_feed(session: requests.Session, key: str, manifest: list[dict], now: dt.
         if link in attempted:
             continue
         it = listing_by_link.get(link) or _item_from_block(link, when, block)
-        repaired_when, repaired_block = build_item(session, key, it, manifest, now)
+        repaired_when, repaired_block = build_item(session, key, it, manifest, now, build_id)
         if _block_complete(key, repaired_block):
             merged[link] = (repaired_when, repaired_block)
             repaired += 1
