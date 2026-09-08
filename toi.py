@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
-"""Build full-text RSS feeds from The Times of India (TOI).
+"""Build full-text RSS feed for Swaminomics (Times of India).
 
-This script builds two unofficial, full-text RSS feeds:
-1. toi-opinion: Daily Edit Page op-eds, editorials (TOI Edit), and columns.
-2. toi-swaminomics: Standalone column feed for Swaminathan S. Anklesaria Aiyar.
-
-Article content is fetched unmetered via TOI's AUFS feed endpoint. Feeds merge
+Fetches Swaminathan S. Anklesaria Aiyar's columns from his TOI Plus author profile.
+Article content is fetched unmetered via TOI's AUFS feed endpoint. The feed merges
 with previously published XML copies to preserve history across runs.
 """
 from __future__ import annotations
@@ -17,7 +14,6 @@ import os
 import re
 import sys
 from email.utils import format_datetime, parsedate_to_datetime
-from enum import Enum
 from xml.sax.saxutils import escape
 
 import requests
@@ -28,15 +24,13 @@ DEFAULT_RETRIES = 2
 DEFAULT_MAX_FETCH = 30
 DEFAULT_MAX_ITEMS = 250
 
+FEED_KEY = "toi-swaminomics"
+FEED_TITLE = "Swaminomics - Swaminathan S Anklesaria Aiyar"
+FEED_DESC = "Unofficial full-text feed of Swaminomics columns by Swaminathan S. Anklesaria Aiyar."
+
 BASE_URL = "https://timesofindia.indiatimes.com"
 AUFS_ARTICLE_URL = "https://plus.timesofindia.com/aufs/feed/show/article/v1?id={}&fv=1495"
-SOLR_OPINION_URL = (
-    "https://global-feed.indiatimes.com/wufs/feed/solr/search/metadata/web"
-    "?source=toi&dm=t&client=toi&contentType=&metaValue=toi%20edit%20page"
-    "&metaProp=BLOGNAME&pp=50&cp=1"
-)
 SWAMI_AUTHOR_URL = f"{BASE_URL}/toi-plus/author-swaminathansanklesariaaiyar-18032"
-TOI_EDIT_PAGE_URL = f"{BASE_URL}/toi-blogs/bloghandle/toi-edit-page"
 
 UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -49,29 +43,6 @@ RETRIES = int(os.environ.get("TOI_RETRIES", str(DEFAULT_RETRIES)))
 OUT_DIR = os.environ.get("TOI_OUT_DIR", "public")
 PUBLISHED_BASE_URL = os.environ.get("TOI_PUBLISHED_BASE_URL", "").strip().rstrip("/")
 MAX_FETCH = int(os.environ.get("TOI_MAX_FETCH", str(DEFAULT_MAX_FETCH)))
-
-
-class FeedKey(Enum):
-    OPINION = "toi-opinion"
-    SWAMINOMICS = "toi-swaminomics"
-
-
-FEEDS: dict[FeedKey, dict] = {
-    FeedKey.OPINION: {
-        "key": "toi-opinion",
-        "title": "TOI Opinion & Edit Page - The Times of India",
-        "desc": "Unofficial full-text feed of The Times of India daily Edit Page op-eds and editorials.",
-        "html": TOI_EDIT_PAGE_URL,
-        "max_items": DEFAULT_MAX_ITEMS,
-    },
-    FeedKey.SWAMINOMICS: {
-        "key": "toi-swaminomics",
-        "title": "Swaminomics - Swaminathan S Anklesaria Aiyar",
-        "desc": "Unofficial full-text feed of Swaminomics columns by Swaminathan S. Anklesaria Aiyar.",
-        "html": SWAMI_AUTHOR_URL,
-        "max_items": DEFAULT_MAX_ITEMS,
-    },
-}
 
 
 # --- http helpers -------------------------------------------------------------
@@ -141,21 +112,13 @@ def cdata(text: str) -> str:
     return xml_safe(text).replace("]]>", "]]]]><![CDATA[>")
 
 
-def parse_date(upd: str | int | None, time_str: str | None) -> dt.datetime:
-    """Parse timestamp from epoch ms or DD-MM-YYYY string."""
+def parse_date(upd: str | int | None) -> dt.datetime:
+    """Parse timestamp from epoch ms."""
     if upd:
         try:
             return dt.datetime.fromtimestamp(int(upd) / 1000, tz=IST)
         except (ValueError, TypeError, OSError):
             pass
-
-    if time_str:
-        try:
-            parsed = dt.datetime.strptime(time_str.strip(), "%d-%m-%Y %H:%M:%S")
-            return parsed.replace(tzinfo=IST)
-        except (ValueError, TypeError):
-            pass
-
     return dt.datetime.now(IST)
 
 
@@ -163,26 +126,14 @@ def parse_date(upd: str | int | None, time_str: str | None) -> dt.datetime:
 IMG_RE = re.compile(r"<img\b[^>]*>", re.I)
 SRC_RE = re.compile(r'\bsrc="([^"]+)"', re.I)
 CAP_RE = re.compile(r'\b(?:cap|caption|alt)="([^"]*)"', re.I)
-VIDEO_RE = re.compile(r"<video\b([^>]*)>(?:</video>)?", re.I)
-SU_RE = re.compile(r'\bsu="([^"]+)"', re.I)
+VIDEO_RE = re.compile(r"<video\b[^>]*>(?:</video>)?", re.I)
 EMBED_RE = re.compile(r"<embed\b[^>]*>", re.I)
 
 
 def format_story(story_html: str, author: str) -> str:
-    """Format raw AUFS Story HTML into clean, responsive paragraphs and figures."""
+    """Format raw AUFS Story HTML into clean text and occasional images only."""
     story = EMBED_RE.sub("", story_html or "")
-
-    def repl_video(m: re.Match) -> str:
-        attrs = m.group(1)
-        su_m = SU_RE.search(attrs)
-        if not su_m:
-            return ""
-        v_url = su_m.group(1)
-        cap_m = CAP_RE.search(attrs)
-        v_title = cap_m.group(1) if cap_m else "Watch Video"
-        return f'<p><a href="{escape(v_url)}">{escape(v_title)}</a></p>'
-
-    story = VIDEO_RE.sub(repl_video, story)
+    story = VIDEO_RE.sub("", story)
 
     def repl_img(m: re.Match) -> str:
         tag = m.group(0)
@@ -254,79 +205,7 @@ def extract_app_json(page: str) -> dict | None:
         return None
 
 
-# --- listing fetchers ---------------------------------------------------------
-def fetch_opinion_solr(session: requests.Session) -> list[dict]:
-    """Fetch recent opinion articles via Solr metadata API."""
-    data = fetch_json(session, SOLR_OPINION_URL)
-    if not data or not isinstance(data, dict):
-        return []
-
-    items = data.get("items", [])
-    out: list[dict] = []
-    seen: set[str] = set()
-
-    for it in items:
-        aid = str(it.get("id", "")).strip()
-        link = it.get("wu") or (f"{BASE_URL}/articleshow/{aid}.cms" if aid else "")
-        if not aid or not link or link in seen:
-            continue
-        seen.add(link)
-        title = clean_text(it.get("hl", ""))
-        author = clean_text(it.get("au", ""))
-        when = parse_date(it.get("upd"), it.get("updatedTime"))
-        syn = clean_text(it.get("syn", ""))
-        out.append(
-            {
-                "id": aid,
-                "link": link,
-                "title": title,
-                "author": author,
-                "date": when,
-                "summary": syn,
-            }
-        )
-
-    return out
-
-
-def fetch_opinion_html(session: requests.Session) -> list[dict]:
-    """Fallback: fetch opinion articles from TOI Edit Page HTML state."""
-    page = fetch_url(session, TOI_EDIT_PAGE_URL)
-    if not page:
-        return []
-
-    app_data = extract_app_json(page)
-    if not app_data:
-        return []
-
-    nl = app_data.get("state", {}).get("newslisting", {}).get("data", {})
-    secitems = nl.get("sectionitems", [])
-    out: list[dict] = []
-    seen: set[str] = set()
-
-    for sec in secitems:
-        for item in sec.get("items", []):
-            sub_items = item.get("items", [item]) if "items" in item else [item]
-            for it in sub_items:
-                aid = str(it.get("id", "")).strip()
-                link = it.get("wu") or (f"{BASE_URL}/articleshow/{aid}.cms" if aid else "")
-                if not aid or not link or link in seen:
-                    continue
-                seen.add(link)
-                out.append(
-                    {
-                        "id": aid,
-                        "link": link,
-                        "title": clean_text(it.get("hl", "")),
-                        "author": clean_text(it.get("authName") or it.get("secname") or ""),
-                        "date": parse_date(it.get("upd"), None),
-                        "summary": clean_text(it.get("des", "")),
-                    }
-                )
-
-    return out
-
-
+# --- listing fetcher ----------------------------------------------------------
 def fetch_swami_items(session: requests.Session) -> list[dict]:
     """Fetch Swaminathan S. Anklesaria Aiyar articles from author page."""
     page = fetch_url(session, SWAMI_AUTHOR_URL)
@@ -356,7 +235,7 @@ def fetch_swami_items(session: requests.Session) -> list[dict]:
                     "link": link,
                     "title": clean_text(it.get("hl", "")),
                     "author": "Swaminathan S Anklesaria Aiyar",
-                    "date": parse_date(it.get("upd"), None),
+                    "date": parse_date(it.get("upd")),
                     "summary": clean_text(it.get("des", "")),
                 }
             )
@@ -368,6 +247,7 @@ def fetch_swami_items(session: requests.Session) -> list[dict]:
 ITEM_RE = re.compile(r"<item>.*?</item>", re.S)
 FEEDLINK_RE = re.compile(r"<link>([^<]+)</link>")
 PUBDATE_RE = re.compile(r"<pubDate>([^<]+)</pubDate>")
+STALE_VIDEO_RE = re.compile(r"<p><a\b[^>]*>(?:Watch Video|.*?videoshow.*?)</a></p>\s*", re.I)
 
 
 def block_link(block: str) -> str | None:
@@ -387,8 +267,13 @@ def block_date(block: str) -> dt.datetime:
     return dt.datetime(1970, 1, 1, tzinfo=dt.timezone.utc)
 
 
+def sanitize_block(block: str) -> str:
+    """Strip legacy video links from cached XML block."""
+    return STALE_VIDEO_RE.sub("", block)
+
+
 def load_published(session: requests.Session, key: str) -> dict[str, tuple[dt.datetime, str]]:
-    """Load published feed XML to retain history across runs."""
+    """Load published feed XML to retain history across runs, stripping legacy videos."""
     if not PUBLISHED_BASE_URL:
         return {}
 
@@ -398,7 +283,7 @@ def load_published(session: requests.Session, key: str) -> dict[str, tuple[dt.da
 
     items: dict[str, tuple[dt.datetime, str]] = {}
     for m in ITEM_RE.finditer(body):
-        b = m.group(0).strip()
+        b = sanitize_block(m.group(0).strip())
         lnk = block_link(b)
         if lnk:
             items[lnk] = (block_date(b), b)
@@ -427,13 +312,12 @@ def render_item(it: dict, body: str, summary: str, when: dt.datetime) -> str:
     )
 
 
-def build_feed(feed_cfg: dict, items: dict[str, tuple[dt.datetime, str]]) -> tuple[str, int]:
+def build_feed(items: dict[str, tuple[dt.datetime, str]]) -> tuple[str, int]:
     """Assemble complete RSS 2.0 channel XML."""
-    ordered = sorted(items.values(), key=lambda t: t[0], reverse=True)[: feed_cfg["max_items"]]
+    ordered = sorted(items.values(), key=lambda t: t[0], reverse=True)[:DEFAULT_MAX_ITEMS]
     blocks = [b for _, b in ordered]
     now = format_datetime(dt.datetime.now(IST))
-    key = feed_cfg["key"]
-    self_url = f"{PUBLISHED_BASE_URL}/{key}/feed.xml" if PUBLISHED_BASE_URL else ""
+    self_url = f"{PUBLISHED_BASE_URL}/{FEED_KEY}/feed.xml" if PUBLISHED_BASE_URL else ""
     atom = (
         f'    <atom:link href="{escape(self_url)}" rel="self" type="application/rss+xml" />\n'
         if self_url
@@ -445,9 +329,9 @@ def build_feed(feed_cfg: dict, items: dict[str, tuple[dt.datetime, str]]) -> tup
         'xmlns:dc="http://purl.org/dc/elements/1.1/" '
         'xmlns:atom="http://www.w3.org/2005/Atom">\n'
         "  <channel>\n"
-        f"    <title>{escape(feed_cfg['title'])}</title>\n"
-        f"    <link>{escape(feed_cfg['html'])}</link>\n"
-        f"    <description>{escape(feed_cfg['desc'])}</description>\n"
+        f"    <title>{escape(FEED_TITLE)}</title>\n"
+        f"    <link>{escape(SWAMI_AUTHOR_URL)}</link>\n"
+        f"    <description>{escape(FEED_DESC)}</description>\n"
         "    <language>en</language>\n"
         f"    <lastBuildDate>{now}</lastBuildDate>\n"
         f"{atom}"
@@ -457,9 +341,9 @@ def build_feed(feed_cfg: dict, items: dict[str, tuple[dt.datetime, str]]) -> tup
     return xml, len(blocks)
 
 
-def write_feed(feed_cfg: dict, xml: str, count: int) -> None:
+def write_feed(xml: str, count: int) -> None:
     """Write feed.xml and index.html to output directory."""
-    d = os.path.join(OUT_DIR, feed_cfg["key"])
+    d = os.path.join(OUT_DIR, FEED_KEY)
     os.makedirs(d, exist_ok=True)
 
     with open(os.path.join(d, "feed.xml"), "w", encoding="utf-8") as f:
@@ -468,37 +352,30 @@ def write_feed(feed_cfg: dict, xml: str, count: int) -> None:
     with open(os.path.join(d, "index.html"), "w", encoding="utf-8") as f:
         f.write(
             "<!doctype html><meta charset='utf-8'>"
-            f"<title>{escape(feed_cfg['title'])} (unofficial RSS)</title>"
-            f"<h1>{escape(feed_cfg['title'])} (unofficial)</h1>"
-            f"<p>{escape(feed_cfg['desc'])}</p>"
+            f"<title>{escape(FEED_TITLE)} (unofficial RSS)</title>"
+            f"<h1>{escape(FEED_TITLE)} (unofficial)</h1>"
+            f"<p>{escape(FEED_DESC)}</p>"
             "<p>Subscribe: <a href='feed.xml'>feed.xml</a></p>"
             f"<p>{count} items. Rebuilt automatically.</p>"
         )
 
 
-def run_feed(session: requests.Session, feed_key: FeedKey, now: dt.datetime) -> int:
-    """Execute feed pipeline for a single feed key."""
-    cfg = FEEDS[feed_key]
-    key_str = cfg["key"]
-    print(f"[{key_str}]")
-
-    merged = load_published(session, key_str)
-
-    if feed_key == FeedKey.OPINION:
-        items = fetch_opinion_solr(session)
-        if not items:
-            items = fetch_opinion_html(session)
-    else:
-        items = fetch_swami_items(session)
-
+def run_feed(session: requests.Session, now: dt.datetime) -> int:
+    """Execute feed pipeline for Swaminomics feed."""
+    print(f"[{FEED_KEY}]")
+    merged = load_published(session, FEED_KEY)
+    items = fetch_swami_items(session)
     print(f"  listing: {len(items)} items")
 
     new_count = 0
     full_count = 0
 
     for it in items:
-        if it["link"] in merged:
+        # Check if item is already cached cleanly without legacy video
+        existing = merged.get(it["link"])
+        if existing and "videoshow" not in existing[1] and "Watch Video" not in existing[1]:
             continue
+
         if new_count >= MAX_FETCH:
             break
 
@@ -514,9 +391,9 @@ def run_feed(session: requests.Session, feed_key: FeedKey, now: dt.datetime) -> 
         merged[it["link"]] = (when, item_xml)
         new_count += 1
 
-    xml_content, kept = build_feed(cfg, merged)
-    write_feed(cfg, xml_content, kept)
-    print(f"  {key_str}: +{new_count} new ({full_count} full body), total {kept}")
+    xml_content, kept = build_feed(merged)
+    write_feed(xml_content, kept)
+    print(f"  {FEED_KEY}: +{new_count} new ({full_count} full body), total {kept}")
     return kept
 
 
@@ -524,12 +401,8 @@ def main() -> int:
     """Main builder entrypoint."""
     session = make_session()
     now = dt.datetime.now(IST)
-    counts: dict[str, int] = {}
-
-    for feed_key in FEEDS:
-        counts[feed_key.value] = run_feed(session, feed_key, now)
-
-    print("Done:", counts)
+    kept = run_feed(session, now)
+    print("Done:", {FEED_KEY: kept})
     return 0
 
 

@@ -927,39 +927,33 @@ the latest 50 explainers, with `pubDate` shown in IST.
 
 # The Times of India feeds — full-text (unofficial)
 
-Full-text RSS feeds for opinion columns and editorials from
+Full-text RSS feed for Swaminomics columns from
 [The Times of India](https://timesofindia.indiatimes.com), built by `toi.py`.
 
 | Feed | What | GitHub Pages |
 |------|------|------|
-| TOI Opinion & Edit Page | daily print Edit Page op-eds, editorials ("TOI Edit"), and columns | [feed.xml](https://jumpingpony.github.io/pib_feed/toi-opinion/feed.xml) |
 | Swaminomics | standalone columns by Swaminathan S. Anklesaria Aiyar | [feed.xml](https://jumpingpony.github.io/pib_feed/toi-swaminomics/feed.xml) |
 
 ## Why this exists
 
-TOI's legacy blogs platform (`/blogs/toi-edit-page/`, `/blogs/swaminomics/`) is
-stale. Active daily Edit Page pieces are published under TOI's modern print
-blogs section, while Swaminomics appears on TOI Plus under author profile `18032`.
-Neither provides full-text RSS feeds.
+Swaminathan S. Anklesaria Aiyar's columns appear on TOI Plus under author profile
+`18032`, without an official full-text RSS feed.
 
 ## How it works
 
-- **`toi-opinion`** queries TOI's Solr metadata API (`/wufs/feed/solr/search/metadata/web`
-  with `metaValue=toi edit page`), falling back to parsing `window.App` state from
-  `https://timesofindia.indiatimes.com/toi-blogs/bloghandle/toi-edit-page`.
-- **`toi-swaminomics`** parses `window.App.state.toiplusauthor` from
+- `toi.py` parses `window.App.state.toiplusauthor` from
   `https://timesofindia.indiatimes.com/toi-plus/author-swaminathansanklesariaaiyar-18032`.
 - Article full text is fetched via TOI's unmetered AUFS article endpoint
   (`https://plus.timesofindia.com/aufs/feed/show/article/v1?id=<id>&fv=1495`).
-- The body is sanitized: ad embeds are stripped, `<video>` placeholders converted
-  to hyperlinks, and images rendered as responsive `<figure>` tags with sensible
-  dimensions hotlinking directly to the TOI CDN without archiving.
+- The body is sanitized: ad embeds and misc video widgets are stripped, and
+  occasional content images are rendered as responsive `<figure>` tags hotlinking
+  directly to the TOI CDN without archiving.
 
 ## Configuration (env vars)
 
 | Var | Default | Meaning |
 |-----|---------|---------|
-| `TOI_MAX_FETCH` | `30` | Max new articles fetched per feed per run |
+| `TOI_MAX_FETCH` | `30` | Max new articles fetched per run |
 | `TOI_TIMEOUT` | `30` | HTTP timeout in seconds |
 | `TOI_RETRIES` | `2` | HTTP retry attempts |
 | `TOI_PUBLISHED_BASE_URL` | – | Live-site base for history-merge |
@@ -967,7 +961,7 @@ Neither provides full-text RSS feeds.
 
 ## Caveats
 
-- Depends on the AUFS article endpoint and TOI's web state JSON structure.
+- Depends on the AUFS article endpoint and TOI's author state JSON structure.
 - Unofficial and unaffiliated; content © Bennett, Coleman & Co. Ltd. (The Times Group).
 
 ---
