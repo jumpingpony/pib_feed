@@ -24,7 +24,8 @@ DEFAULT_RETRIES = 2
 DEFAULT_MAX_FETCH = 30
 DEFAULT_MAX_ITEMS = 250
 
-FEED_KEY = "toi-swaminomics"
+FEED_KEY = "toi-swami-nomics"
+LEGACY_FEED_KEY = "toi-swaminomics"
 FEED_TITLE = "Swaminomics - Swaminathan S Anklesaria Aiyar"
 FEED_DESC = "Unofficial full-text feed of Swaminomics columns by Swaminathan S. Anklesaria Aiyar."
 
@@ -364,6 +365,9 @@ def run_feed(session: requests.Session, now: dt.datetime) -> int:
     """Execute feed pipeline for Swaminomics feed."""
     print(f"[{FEED_KEY}]")
     merged = load_published(session, FEED_KEY)
+    if not merged:
+        merged = load_published(session, LEGACY_FEED_KEY)
+
     items = fetch_swami_items(session)
     print(f"  listing: {len(items)} items")
 

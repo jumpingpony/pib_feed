@@ -932,7 +932,7 @@ Full-text RSS feed for Swaminomics columns from
 
 | Feed | What | GitHub Pages |
 |------|------|------|
-| Swaminomics | standalone columns by Swaminathan S. Anklesaria Aiyar | [feed.xml](https://jumpingpony.github.io/pib_feed/toi-swaminomics/feed.xml) |
+| Swaminomics | standalone columns by Swaminathan S. Anklesaria Aiyar | [feed.xml](https://jumpingpony.github.io/pib_feed/toi-swami-nomics/feed.xml) |
 
 ## Why this exists
 

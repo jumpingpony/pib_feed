@@ -13,7 +13,7 @@
 
 - **Times of India Op-Eds Full-Text Feed** (Done):
   - Research TOI Opinion / Edit Page endpoints and TOI Plus Swaminomics.
-  - Create standalone builder `toi.py` producing `public/toi-opinion/feed.xml` and `public/toi-swaminomics/feed.xml`.
+  - Create standalone builder `toi.py` producing `public/toi-opinion/feed.xml` and `public/toi-swami-nomics/feed.xml`.
   - Add feed definition to OPML collections and documentation.
 
 - **Add back The Economist RSS feeds** (Done):
