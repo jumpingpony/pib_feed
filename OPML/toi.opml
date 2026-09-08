@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <head>
+    <title>The Times of India feeds (unofficial, full-text)</title>
+  </head>
+  <body>
+      <outline text="The Times of India (unofficial, full-text)" title="The Times of India (unofficial, full-text)">
+        <outline type="rss" text="TOI Opinion &amp; Edit Page - The Times of India" title="TOI Opinion &amp; Edit Page - The Times of India" xmlUrl="https://jumpingpony.github.io/pib_feed/toi-opinion/feed.xml" htmlUrl="https://timesofindia.indiatimes.com/toi-blogs/bloghandle/toi-edit-page"/>
+        <outline type="rss" text="Swaminomics - Swaminathan S Anklesaria Aiyar" title="Swaminomics - Swaminathan S Anklesaria Aiyar" xmlUrl="https://jumpingpony.github.io/pib_feed/toi-swaminomics/feed.xml" htmlUrl="https://timesofindia.indiatimes.com/toi-plus/author-swaminathansanklesariaaiyar-18032"/>
+      </outline>
+  </body>
+</opml>

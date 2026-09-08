@@ -81,5 +81,9 @@
         <outline type="rss" text="Magazine - Frontline" title="Magazine - Frontline" xmlUrl="https://jumpingpony.github.io/pib_feed/frontline_magazine/feed.xml" htmlUrl="https://frontline.thehindu.com/current-issue/"/>
         <outline type="rss" text="Digital Exclusives - Frontline" title="Digital Exclusives - Frontline" xmlUrl="https://jumpingpony.github.io/pib_feed/frontline_blog/feed.xml" htmlUrl="https://frontline.thehindu.com/blog/"/>
       </outline>
+      <outline text="The Times of India (unofficial, full-text)" title="The Times of India (unofficial, full-text)">
+        <outline type="rss" text="TOI Opinion &amp; Edit Page - The Times of India" title="TOI Opinion &amp; Edit Page - The Times of India" xmlUrl="https://jumpingpony.github.io/pib_feed/toi-opinion/feed.xml" htmlUrl="https://timesofindia.indiatimes.com/toi-blogs/bloghandle/toi-edit-page"/>
+        <outline type="rss" text="Swaminomics - Swaminathan S Anklesaria Aiyar" title="Swaminomics - Swaminathan S Anklesaria Aiyar" xmlUrl="https://jumpingpony.github.io/pib_feed/toi-swaminomics/feed.xml" htmlUrl="https://timesofindia.indiatimes.com/toi-plus/author-swaminathansanklesariaaiyar-18032"/>
+      </outline>
   </body>
 </opml>
