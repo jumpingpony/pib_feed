@@ -213,6 +213,76 @@ class TestEconomistBuilder(unittest.TestCase):
             self.assertIsNotNone(content)
             self.assertEqual(content.get("headline"), "Fallback Title")
 
+    def test_resolve_build_id_podcasts(self):
+        mock_session = MagicMock()
+        podcasts_html = '<script id="__NEXT_DATA__">{"buildId":"pod-build-456"}</script>'
+
+        def fake_fetch(session, url):
+            if url.endswith("/podcasts"):
+                return podcasts_html
+            return None
+
+        with patch("economist.fetch", side_effect=fake_fetch):
+            build_id = economist.resolve_build_id(mock_session)
+            self.assertEqual(build_id, "pod-build-456")
+
+    def test_fetch_listing_default_next_data(self):
+        mock_session = MagicMock()
+        mock_payload = {
+            "pageProps": {
+                "content": {
+                    "articles": [
+                        {
+                            "url": "/finance-and-economics/2026/09/15/test-ipo",
+                            "headline": "Test IPO Article",
+                            "datePublished": "2026-09-15T20:00:00.000Z",
+                        }
+                    ]
+                }
+            }
+        }
+        called_urls = []
+
+        def fake_fetch(session, url):
+            called_urls.append(url)
+            if url.endswith(".json"):
+                return json.dumps(mock_payload)
+            return None
+
+        with patch("economist.fetch", side_effect=fake_fetch):
+            listing = economist.fetch_listing(
+                mock_session, "economist-finance-and-economics", "build-123"
+            )
+            self.assertEqual(len(listing), 1)
+            self.assertEqual(listing[0]["headline"], "Test IPO Article")
+            # Default behavior must call Next.js data endpoint directly, not HTML
+            self.assertEqual(len(called_urls), 1)
+            self.assertTrue(called_urls[0].endswith("/finance-and-economics.json"))
+
+    def test_fetch_listing_fallback_html(self):
+        mock_session = MagicMock()
+        html_payload = (
+            '<script id="__NEXT_DATA__">{"props":{"pageProps":{"content":'
+            '{"articles":[{"url":"/fallback","headline":"Fallback Headline"}]}}}}</script>'
+        )
+        called_urls = []
+
+        def fake_fetch(session, url):
+            called_urls.append(url)
+            if url.endswith(".json"):
+                return None
+            return html_payload
+
+        with patch("economist.fetch", side_effect=fake_fetch):
+            listing = economist.fetch_listing(
+                mock_session, "economist-finance-and-economics", "build-123"
+            )
+            self.assertEqual(len(listing), 1)
+            self.assertEqual(listing[0]["headline"], "Fallback Headline")
+            self.assertEqual(len(called_urls), 2)
+            self.assertTrue(called_urls[0].endswith(".json"))
+            self.assertEqual(called_urls[1], "https://www.economist.com/finance-and-economics")
+
 
 class TestNewsOnAirPodcast(unittest.TestCase):
     def test_categories_configuration(self):

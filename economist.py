@@ -195,11 +195,17 @@ def extract_build_id(page: str) -> str | None:
 
 
 def resolve_build_id(session: requests.Session, page: str | None = None) -> str | None:
-    # Reuse buildId from listing page or fetch homepage
+    # Reuse buildId from listing page, unblocked podcasts page, or homepage
     if page:
         build_id = extract_build_id(page)
         if build_id:
             return build_id
+
+    podcasts = fetch(session, f"{BASE}/podcasts")
+    build_id = extract_build_id(podcasts) if podcasts else None
+    if build_id:
+        return build_id
+
     home = fetch(session, BASE)
     return extract_build_id(home) if home else None
 
@@ -381,18 +387,18 @@ def render_body(content: dict, manifest: list[dict]) -> tuple[str, str]:
 
 
 # --- listing parsing ----------------------------------------------------------
-def parse_listing(page: str) -> list[dict]:
-    content = page_content(page)
-    if not content:
-        return []
+def parse_articles_list(content: dict) -> list[dict]:
     out: list[dict] = []
     seen: set[str] = set()
+
     for a in content.get("articles") or []:
         if not isinstance(a, dict):
             continue
+
         url = (a.get("url") or "").strip()
         if not url or url in seen:
             continue
+
         seen.add(url)
         link = url if url.startswith("http") else BASE + url
         out.append(
@@ -406,7 +412,41 @@ def parse_listing(page: str) -> list[dict]:
                 "duration": clean(a.get("duration") or ""),
             }
         )
+
     return out
+
+
+def parse_listing(page: str) -> list[dict]:
+    content = page_content(page)
+    if not content:
+        return []
+
+    return parse_articles_list(content)
+
+
+def fetch_listing(
+    session: requests.Session,
+    key: str,
+    build_id: str | None,
+) -> list[dict]:
+    # Query Next.js data route by default to bypass DataDome HTML challenges
+    if build_id and key in FEEDS:
+        data_url = article_data_url(build_id, FEEDS[key]["page"])
+        raw = fetch(session, data_url)
+        if raw:
+            try:
+                payload = json.loads(raw)
+                content = (payload.get("pageProps") or {}).get("content")
+                if isinstance(content, dict):
+                    items = parse_articles_list(content)
+                    if items:
+                        return items
+            except ValueError:
+                pass
+
+    # Fallback to direct HTML fetch
+    page = fetch(session, FEEDS[key]["page"]) if key in FEEDS else None
+    return parse_listing(page) if page else []
 
 
 def parse_iso(s: str | None) -> dt.datetime | None:
@@ -878,9 +918,8 @@ def build_item(
 def run_feed(session: requests.Session, key: str, manifest: list[dict], now: dt.datetime) -> int:
     print(f"[{key}]")
     merged = load_published(session, key)
-    page = fetch(session, FEEDS[key]["page"])
-    build_id = resolve_build_id(session, page)
-    listing = parse_listing(page) if page else []
+    build_id = resolve_build_id(session)
+    listing = fetch_listing(session, key, build_id)
     print(f"  listing: {len(listing)} articles")
     listing_by_link = {it["link"]: it for it in listing}
     newest_published = max((when for when, _ in merged.values()), default=None)
