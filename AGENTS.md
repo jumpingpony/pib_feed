@@ -31,7 +31,7 @@ Use Python 3.12-compatible code, four-space indentation, `snake_case` for functi
 
 There is no automated test suite. Make a narrow local run for the modified source, confirm it exits successfully, and validate that the expected `feed.xml` files are non-empty and parseable. Avoid broad production-like scans during development; builders scrape external services, so keep worker counts and page/year ranges conservative.
 
-Before adding or changing a source's full-article extraction, inspect the local Bypass Paywalls Chrome Clean rules at `/home/slawpper/.local/share/bypass-paywalls-chrome-clean-master` for source-specific ways to identify the complete article body.
+Before adding or changing a source's full-article extraction, update the extension via its download procedure and inspect the local rules at `/home/slawpper/.local/share/bypass-paywalls-chrome-clean-master` for source-specific ways to identify the complete article body.
 
 ## HTTP User-Agent
 

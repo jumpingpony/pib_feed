@@ -12,42 +12,73 @@ This runbook guides the systematic identification, inspection, full-text extract
 
 ---
 
-## 1. Source Discovery & Endpoint Hierarchy
+## 1. Ground-Truth Inspection & Paywall Impact (First Step)
 
-When onboarding a new publication or column, evaluate potential data sources from highest structure to lowest:
+Do not jump to a predetermined endpoint type before understanding the live webpage and paywall interaction. Listing rigid solutions first artificially reduces research scope.
 
-### Step 1: Endpoint Priority Ladder
-1. **Public Headless / CMS APIs**:
-   - Check standard CMS endpoints first:
-     - WordPress REST API: `/wp-json/wp/v2/posts?categories=...` or `/wp-json/wp/v2/article`.
-     - Ghost Content API: `/ghost/api/v3/content/posts/`.
-     - Next.js / Nuxt hydration payloads: `/_next/data/...` or `/_payload.json`.
-   - Advantages: Clean structured JSON, rendered or structured bodies, zero scraping fragility.
+### Step 1: Live Terminal Probe
+- Fetch the target URL directly using the project standard User-Agent:
+  ```bash
+  curl -A "$UA" -sI "$URL"
+  curl -A "$UA" -sL "$URL" -o sample.html
+  ```
+- Inspect the raw HTML, response headers, and status codes:
+  - Is the page server-rendered, or is it an SPA shell requiring client-side hydration?
+  - Where does the article text live? Inside semantic HTML tags, embedded JSON script tags, or fetched asynchronously?
+  - Are edge CDNs (Cloudflare, Akamai) issuing challenges or 403s against automated tools?
 
-2. **Hydration & Application State**:
-   - Inspect server-rendered page HTML for global state variables:
-     - `window.__INITIAL_STATE__`
-     - `window.App` / `window.__DATA__`
-     - `<script id="__NEXT_DATA__" type="application/json">`
-     - `<script type="application/ld+json">` (ItemList / NewsArticle schemas)
-   - Advantages: Contains pre-rendered article lists, pagination tokens, timestamps, and metadata without parsing complex HTML trees.
+### Step 2: Paywall & Anti-Bot Rule Inspection
+- **Pre-Inspection Rule Refresh**: Update the local Bypass Paywalls Clean database in place before consulting rules:
+  1. Note current version:
+     ```bash
+     grep '"version"' ~/.local/share/bypass-paywalls-chrome-clean-master/manifest.json
+     ```
+  2. Download latest master zip with retries and verify archive integrity:
+     ```bash
+     curl -fL --retry 3 -o /tmp/bpc.zip \
+       "https://gitflic.ru/project/magnolia1234/bpc_uploads/blob/raw?file=bypass-paywalls-chrome-clean-master.zip"
+     file /tmp/bpc.zip   # verify output contains "Zip archive"
+     ```
+  3. Overwrite files in place:
+     ```bash
+     unzip -q -o /tmp/bpc.zip -d ~/.local/share/
+     ```
+  4. Verify updated version and remove temp archive:
+     ```bash
+     grep '"version"' ~/.local/share/bypass-paywalls-chrome-clean-master/manifest.json
+     rm -f /tmp/bpc.zip
+     ```
+- Check `sites.js` and `cs_local/contentScript_en.js` for the target domain:
+  - Observe how the paywall affects the site: client-side script overlays, CSS gating, crawler verification, or cookie metering.
+  - Determine if the raw server-side GET already bypasses the paywall (because client-side JS never runs).
+  - Determine if crawler user-agents, `X-Forwarded-For` spoofing, or translation relays (`translate.goog`) unlock the full text.
+  - Check if dedicated article feed APIs or `/amp/` alternate endpoints serve unmetered full text.
 
-3. **Internal Microservice / Search Index APIs**:
-   - Trace network calls or search page bundles for internal backend gateways:
-     - Solr / Elasticsearch search or feed endpoints (e.g., `/wufs/feed/...`, `/api/search/...`).
-     - Content API feeds used by mobile apps or dynamic frontends.
-
-4. **Dedicated Author / Section Profiles**:
-   - If an op-ed or column does not appear on the general editorial front, locate the author's primary profile page or dedicated topic URL.
-   - Compare update timestamps against front-page indices to detect section fragmentation.
-
-5. **Official RSS/Atom Feeds (Metadata Baseline)**:
-   - Check `<link rel="alternate" type="application/rss+xml">` or `/rss`, `/feed`, `/feeds/`.
-   - Often metadata-only (titles and links without bodies), but provides canonical URLs and pubDate timestamps.
+### Step 3: Runner Environment Heuristic
+- When a target site employs CDN bot-detection (e.g., Cloudflare, Akamai, CloudFront), GitHub Actions runner IPs may behave differently than local IPs.
+- If requests fail in CI, dispatch a minimal temporary `.github/workflows/probe.yml` using `gh run watch` to test endpoint connectivity from the exact runner family.
 
 ---
 
-## 2. Freshness & Frequency Validation Heuristics
+## 2. Open-Ended Architectural Discovery
+
+Conduct unconstrained exploratory research into how the site exposes and paginates its content.
+
+### Reference Toolkit of Potential Architectural Solutions
+Consult this non-exhaustive reference checklist during research for inspiration, without treating it as a restrictive funnel:
+- **Headless / CMS REST & GraphQL APIs**: WordPress REST (`/wp-json/wp/v2/posts`), Ghost Content API, Drupal JSON:API, or GraphQL endpoints.
+- **Hydration & Application State**: Next.js (`<script id="__NEXT_DATA__">`, `/_next/data/...`), Nuxt (`_payload.json`), global state (`__INITIAL_STATE__`), JSON-LD schema blocks (`ItemList`, `NewsArticle`).
+- **Internal Microservices & Content Feeds**: Unmetered AUFS feeds, Solr/Elasticsearch search gateways, or mobile content APIs.
+- **Dedicated Author / Section Profiles**: Author profile URLs or section-specific indexes that partition editorial columns from general blogs.
+- **Syndication Feeds**: Official RSS/Atom/JSON feeds used as discovery queues for canonical permalinks and publication dates.
+- **Sequential Walks & Form Postbacks**: Monotonic numerical sequence walks (e.g. PRID ranges) or form postback sequences across date/category facets.
+- **Binary Asset & Enclosure Endpoints**: Direct PDF or MP3 tracks verified via HTTP byte-range probes for length and MIME type.
+- **Alternate Surfaces & Mirrors**: AMP variants (`/amp/`), translation relays (`translate.goog`), print edition views, or web archives.
+- **Site-Specific Mechanisms**: Unindexed internal endpoints, mobile web views, or custom token exchanges. Original research must explore the live application behavior.
+
+---
+
+## 3. Freshness & Frequency Validation Heuristics
 
 ### Detecting Stale vs. Active Platforms
 - Publishers frequently migrate CMS architectures without redirecting legacy subdomains or paths (e.g., abandoning older WordPress `/blogs/` while launching new native sections).
@@ -55,27 +86,6 @@ When onboarding a new publication or column, evaluate potential data sources fro
   - If latest post date is months or years old, mark candidate as abandoned.
   - Confirm active publication matches expected editorial cadence (e.g., daily for print edit pages, weekly for Sunday columns).
 - Look for "Print Edition" or "From Print" tags when seeking syndicated op-eds that may be partitioned from web-only community blogs.
-
----
-
-## 3. Ground-Truth Inspection & Paywall Heuristics
-
-### Direct Inspection Rules
-- Always use the project standard User-Agent header on every network probe.
-- Fetch raw HTML and API responses directly via terminal tools (`curl`, `wget`) or Python sessions before designing selectors.
-
-### Bypass Paywalls Clean Rules Inspection
-- Check the local Bypass-Paywalls-Clean database at:
-  `/home/slawpper/.local/share/bypass-paywalls-chrome-clean-master`
-- Check `sites.js` and `cs_local/contentScript_en.js` for the target domain:
-  - **Client-side overlays**: Paywall hides content via CSS/JS while full body is served in HTML DOM (no bypass needed on server-side requests).
-  - **Dedicated article feed APIs**: Many paywalled outlets fetch full text via internal unmetered AUFS/JSON endpoints.
-  - **Crawler verification bypass**: Check if the site serves full text to Googlebot via user-agent + `X-Forwarded-For` spoofing.
-  - **AMP endpoints**: Check if an `/amp/` alternate URL provides clean, server-rendered full text.
-
-### Runner Environment Heuristic
-- When a target site employs CDN bot-detection (e.g., Cloudflare, Akamai, CloudFront), GitHub Actions runner IPs may behave differently than local IPs.
-- If requests fail in CI, dispatch a minimal temporary `.github/workflows/probe.yml` using `gh run watch` to test endpoint connectivity from the exact runner family.
 
 ---
 
@@ -98,7 +108,9 @@ When onboarding a new publication or column, evaluate potential data sources fro
 ### Junk Elimination
 - Strip all `<embed>`, `<ins>`, `<script>`, `<style>`, and `<iframe>` ad placeholders.
 - Remove promo text matching patterns such as "Also Read", "Click Here", "Subscribe", and newsletter banners.
-- Convert video/audio placeholders into plain hyperlink paragraphs (`<p><a href="...">Watch Video</a></p>`).
+- **Video/Audio Links**:
+  - Only related video and audio links may be added to feed items.
+  - **User Confirmation Required**: Prompt the user and obtain explicit confirmation before including any video or audio links in feed output.
 
 ---
 
@@ -108,6 +120,30 @@ When onboarding a new publication or column, evaluate potential data sources fro
 - Always support a `*_PUBLISHED_BASE_URL` environment variable.
 - On startup, fetch the live `<base>/<key>/feed.xml` to load existing item GUIDs and timestamps.
 - Only scrape detail bodies for **new items** not already present in the published feed, respecting a configurable `MAX_FETCH` limit.
+
+### Continuous Feed Entry Extraction & Continuity Invariants
+- **Cadence Invariants & Gap Detection**:
+  - Enforce maximum allowed interval gaps based on publication cadence:
+    - Daily: <= 3 days maximum gap.
+    - Weekly: <= 10 days maximum gap.
+    - Monthly: <= 45 days maximum gap.
+    - Seasonal: Event or issue driven.
+  - Items must be strictly reverse-chronological (`pubDate[i] >= pubDate[i+1]`).
+  - Legitimate editorial breaks or recess periods must be registered in `tests/intentional_gaps.json`.
+- **Timestamp Synthesis & Order Preservation**:
+  - When items carry only coarse dates (year or month only), anchor mid-period and subtract rank offsets (`anchor - rank * delta`) so feed readers preserve listing order.
+  - Resurfaced items (dockets, legislative trackers): sort and date by `modified` timestamp rather than `created`.
+  - *Date Stability*: Once an item is published, preserve its assigned `pubDate` across all future runs.
+- **Continuous Pagination & Stop Conditions**:
+  - Walk backwards from newest items.
+  - Do not terminate on a single known match (to tolerate pinned posts or re-ordered items). Terminate only after $N \ge 2$ consecutive pages have zero new items (`stale >= 2`) or when `MAX_FETCH` is reached.
+  - Use API delta parameters (`&after=<ISO>`) where supported.
+- **Sequence Scanning & Filter Caching**:
+  - For monotonic numeric ID walks, scan backwards `SCAN_COUNT` steps from the highest observed ID.
+  - Persist evaluated non-matching or filtered IDs in a state cache (`cache.json`) to prevent redundant requests on future runs.
+- **Incomplete Item Self-Repair**:
+  - On each steady-state run, re-inspect the newest $N$ published entries (typically top 5).
+  - If an item body is truncated or contains fallback placeholders, re-scrape and repair it in the merged state.
 
 ### Feed Maintenance
 - Sort all merged items strictly newest-first by publication datetime.
