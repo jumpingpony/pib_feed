@@ -14,6 +14,7 @@ import meca
 import mygov
 import newsonair_feed
 import niti
+import toi
 import visioniaspt365
 
 IST = dt.timezone(dt.timedelta(hours=5, minutes=30))
@@ -365,6 +366,23 @@ class TestNewsOnAirPodcast(unittest.TestCase):
         self.assertIn("<ol>\n<li>Headline 1</li>\n<li>Headline 2</li>\n</ol>", bulletin["body_html"])
         self.assertIn("<p>Intro news.</p>", bulletin["body_html"])
         self.assertIn("<p>Outro news.</p>", bulletin["body_html"])
+
+
+class TestToiBuilder(unittest.TestCase):
+    """Verify Swaminomics feed constants and references."""
+
+    def test_toi_feed_key(self):
+        # Ensure active feed key is toi-swami-nomics and legacy key is absent.
+        self.assertEqual(toi.FEED_KEY, "toi-swami-nomics")
+        self.assertFalse(hasattr(toi, "LEGACY_FEED_KEY"))
+
+    def test_toi_no_legacy_refs(self):
+        # Ensure no legacy toi-swaminomics string remains in toi.py.
+        toi_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "toi.py"))
+        with open(toi_path, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        self.assertNotIn("toi-swaminomics", content)
 
 
 if __name__ == "__main__":
