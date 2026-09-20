@@ -5,6 +5,7 @@
   </head>
   <body>
       <outline text="The Economist (unofficial, full-text)" title="The Economist (unofficial, full-text)">
+        <outline type="rss" text="All articles - Economist" title="All articles - Economist" xmlUrl="https://jumpingpony.github.io/pib_feed/economist-all/feed.xml" htmlUrl="https://www.economist.com/latest"/>
         <outline type="rss" text="Economic &amp; financial indicators - Economist" title="Economic &amp; financial indicators - Economist" xmlUrl="https://jumpingpony.github.io/pib_feed/economist-indicators/feed.xml" htmlUrl="https://www.economist.com/topics/economic-and-financial-indicators"/>
         <outline type="rss" text="Finance &amp; economics - Economist" title="Finance &amp; economics - Economist" xmlUrl="https://jumpingpony.github.io/pib_feed/economist-finance-and-economics/feed.xml" htmlUrl="https://www.economist.com/finance-and-economics"/>
         <outline type="rss" text="Business - Economist" title="Business - Economist" xmlUrl="https://jumpingpony.github.io/pib_feed/economist-business/feed.xml" htmlUrl="https://www.economist.com/topics/business"/>

@@ -50,6 +50,7 @@ import json
 import os
 import re
 import sys
+import xml.etree.ElementTree as ET
 from email.utils import format_datetime, parsedate_to_datetime
 from urllib.parse import urlsplit, urlunsplit
 from xml.sax.saxutils import escape
@@ -80,8 +81,20 @@ PUBLISHED_BASE_URL = os.environ.get("ECON_PUBLISHED_BASE_URL", "").strip().rstri
 ARCHIVE_MODE = os.environ.get("ECON_ARCHIVE_MODE", "link").strip().lower()
 ARCHIVE_BASE_URL = os.environ.get("ECON_ARCHIVE_BASE_URL", "").strip().rstrip("/")
 ARCHIVE_DIR = os.environ.get("ECON_ARCHIVE_MANIFEST_DIR", "image_archive")
+DEFAULT_DAYS = 14
+ALL_DAYS = int(os.environ.get("ECON_ALL_DAYS", os.environ.get("ECON_DAYS", str(DEFAULT_DAYS))))
 
 FEEDS = {
+    "economist-all": {
+        "title": "All articles - Economist",
+        "desc": "Unofficial full-text feed of The Economist's latest articles across all sections.",
+        "page": f"{BASE}/latest",
+        "html": f"{BASE}/latest",
+        "rss": f"{BASE}/latest/rss.xml",
+        "days": ALL_DAYS,
+        "max_items": 300,
+        "archive_images": True,
+    },
     "economist-indicators": {
         "title": "Economic & financial indicators - Economist",
         "desc": "Unofficial full-content feed of The Economist's weekly economic data, "
@@ -416,6 +429,51 @@ def parse_articles_list(content: dict) -> list[dict]:
     return out
 
 
+def parse_rss_listing(page: str) -> list[dict]:
+    # Extract item links and publication metadata from official RSS XML
+    out: list[dict] = []
+    seen: set[str] = set()
+
+    try:
+        root = ET.fromstring(page)
+    except ET.ParseError:
+        return []
+
+    channel = root.find("channel")
+    if channel is None:
+        return []
+
+    for item in channel.findall("item"):
+        url = (item.findtext("link") or "").strip()
+        if not url or url in seen:
+            continue
+
+        seen.add(url)
+        pub_str = item.findtext("pubDate")
+        pub_date = None
+        if pub_str:
+            try:
+                pub_date = parsedate_to_datetime(pub_str.strip())
+                if pub_date.tzinfo is None:
+                    pub_date = pub_date.replace(tzinfo=dt.timezone.utc)
+            except (TypeError, ValueError):
+                pass
+
+        out.append(
+            {
+                "link": url,
+                "headline": clean(item.findtext("title") or url),
+                "flyTitle": "",
+                "rubric": clean(item.findtext("description") or ""),
+                "date": pub_date,
+                "image": "",
+                "duration": "",
+            }
+        )
+
+    return out
+
+
 def parse_listing(page: str) -> list[dict]:
     content = page_content(page)
     if not content:
@@ -429,6 +487,16 @@ def fetch_listing(
     key: str,
     build_id: str | None,
 ) -> list[dict]:
+    # Prefer official RSS feed when configured
+    feed = FEEDS.get(key, {})
+    rss_url = feed.get("rss")
+    if rss_url:
+        page = fetch(session, rss_url)
+        if page:
+            items = parse_rss_listing(page)
+            if items:
+                return items
+
     # Query Next.js data route by default to bypass DataDome HTML challenges
     if build_id and key in FEEDS:
         data_url = article_data_url(build_id, FEEDS[key]["page"])
@@ -923,11 +991,18 @@ def run_feed(session: requests.Session, key: str, manifest: list[dict], now: dt.
     print(f"  listing: {len(listing)} articles")
     listing_by_link = {it["link"]: it for it in listing}
     newest_published = max((when for when, _ in merged.values()), default=None)
+    days = FEEDS[key].get("days")
+    cutoff = (now - dt.timedelta(days=days)) if days else None
     new = 0
     attempted: set[str] = set()
+
     for it in listing:
         if it["link"] in merged:
             continue
+
+        if cutoff and it["date"] and it["date"] < cutoff:
+            continue
+
         # Topic payloads are curated rather than strictly chronological: a new
         # item can appear below an already-published one. Use the source date as
         # the boundary while independently skipping every known permalink.
@@ -935,6 +1010,7 @@ def run_feed(session: requests.Session, key: str, manifest: list[dict], now: dt.
             it["date"] is None or it["date"] < newest_published
         ):
             continue
+
         when, block = build_item(session, key, it, manifest, now, build_id)
         merged[it["link"]] = (when, block)
         attempted.add(it["link"])
@@ -976,8 +1052,12 @@ def main() -> int:
     now = dt.datetime.now(IST)
     manifest: list[dict] = []
     counts: dict[str, int] = {}
-    for key in FEEDS:
+    target = os.environ.get("ECON_FEEDS", "").strip()
+    keys = [k.strip() for k in target.split(",") if k.strip() in FEEDS] if target else list(FEEDS.keys())
+
+    for key in keys:
         counts[key] = run_feed(session, key, manifest, now)
+
     write_manifest(manifest)
     print(f"ARCHIVE_MODE={ARCHIVE_MODE} images={len(manifest)}")
     print("Done:", counts)

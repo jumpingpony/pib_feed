@@ -283,6 +283,59 @@ class TestEconomistBuilder(unittest.TestCase):
             self.assertTrue(called_urls[0].endswith(".json"))
             self.assertEqual(called_urls[1], "https://www.economist.com/finance-and-economics")
 
+    def test_parse_rss_listing(self):
+        rss_payload = """<?xml version="1.0" encoding="UTF-8"?>
+        <rss version="2.0">
+          <channel>
+            <title>Latest Updates</title>
+            <link>https://www.economist.com/latest</link>
+            <item>
+              <title>Article One Headline</title>
+              <description>Article one summary</description>
+              <link>https://www.economist.com/finance-and-economics/2026/09/20/article-one</link>
+              <pubDate>Sun, 20 Sep 2026 12:00:00 +0000</pubDate>
+            </item>
+            <item>
+              <title>Article Two Headline</title>
+              <description>Article two summary</description>
+              <link>https://www.economist.com/business/2026/09/19/article-two</link>
+              <pubDate>Sat, 19 Sep 2026 10:00:00 +0000</pubDate>
+            </item>
+          </channel>
+        </rss>"""
+        items = economist.parse_rss_listing(rss_payload)
+        self.assertEqual(len(items), 2)
+        self.assertEqual(items[0]["headline"], "Article One Headline")
+        self.assertEqual(items[0]["link"], "https://www.economist.com/finance-and-economics/2026/09/20/article-one")
+        self.assertEqual(items[0]["rubric"], "Article one summary")
+        self.assertEqual(items[0]["date"].day, 20)
+
+    def test_fetch_listing_rss(self):
+        mock_session = MagicMock()
+        rss_payload = """<?xml version="1.0" encoding="UTF-8"?>
+        <rss version="2.0">
+          <channel>
+            <item>
+              <title>RSS Headline</title>
+              <link>https://www.economist.com/world/article</link>
+              <pubDate>Sun, 20 Sep 2026 14:00:00 +0000</pubDate>
+            </item>
+          </channel>
+        </rss>"""
+        with patch("economist.fetch", return_value=rss_payload):
+            listing = economist.fetch_listing(mock_session, "economist-all", "build-123")
+            self.assertEqual(len(listing), 1)
+            self.assertEqual(listing[0]["headline"], "RSS Headline")
+            self.assertEqual(listing[0]["link"], "https://www.economist.com/world/article")
+
+    def test_all_articles_feed_configured(self):
+        self.assertIn("economist-all", economist.FEEDS)
+        feed = economist.FEEDS["economist-all"]
+        self.assertEqual(feed["title"], "All articles - Economist")
+        self.assertTrue(feed["rss"].endswith("/latest/rss.xml"))
+        self.assertGreaterEqual(feed["max_items"], 200)
+        self.assertEqual(feed["days"], 14)
+
 
 class TestNewsOnAirPodcast(unittest.TestCase):
     def test_categories_configuration(self):
