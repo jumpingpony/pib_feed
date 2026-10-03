@@ -8,3 +8,4 @@ scratch/
 scripts/
 .inoreaderconfig
 *.inoreaderconfig
+.todo/
