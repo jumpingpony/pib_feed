@@ -410,8 +410,9 @@ class TestPibBuilder(unittest.TestCase):
             self.assertEqual(retry, set())
 
     def test_year_feed_accepts_unversioned_cache(self):
-        # Only press_releases bumped its cache version; year feeds keep their
-        # checked ids so a deploy does not trigger a mass rescan.
+        # Year feeds keep their checked ids so a deploy does not trigger a mass
+        # rescan; only feeds whose cache lost releases (press_releases, pmo)
+        # bump their per-feed cache version.
         feed = next(f for f in pib_feed.FEEDS if f["key"] == "backgrounders")
         with tempfile.TemporaryDirectory() as td, patch.object(
             pib_feed, "OUT_DIR", td
@@ -421,6 +422,22 @@ class TestPibBuilder(unittest.TestCase):
                 json.dump({"checked": [1, 2, 3]}, f)
             _, checked, retry = pib_feed.load_published(MagicMock(), feed)
             self.assertEqual(checked, {1, 2, 3})
+            self.assertEqual(retry, set())
+
+    def test_pmo_ignores_unversioned_cache(self):
+        # PMO releases are Hindi-first. The Oct 2026 parser break discarded the
+        # fetched releases while caching their ids as checked, so the v1 cache
+        # never re-fetched them and the feed stayed stale. The version bump
+        # forces the same one-time rescan press_releases got.
+        feed = next(f for f in pib_feed.FEEDS if f["key"] == "pmo")
+        with tempfile.TemporaryDirectory() as td, patch.object(
+            pib_feed, "OUT_DIR", td
+        ), patch.object(pib_feed, "PUBLISHED_BASE_URL", ""):
+            os.makedirs(os.path.join(td, "pmo"), exist_ok=True)
+            with open(os.path.join(td, "pmo", "cache.json"), "w") as f:
+                json.dump({"checked": [1, 2, 3]}, f)
+            _, checked, retry = pib_feed.load_published(MagicMock(), feed)
+            self.assertEqual(checked, set())
             self.assertEqual(retry, set())
 
     def test_cache_roundtrip_keeps_retry(self):

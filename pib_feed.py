@@ -97,6 +97,9 @@ FEEDS = [
         # Hindi release links its English twin PRID in the "other languages"
         # block, so resolve that and scrape the English document.
         "resolve_twin": True,
+        # v2 forces one rescan: the Oct 2026 parser break silently discarded
+        # fetched releases, and their Hindi ids are cached as checked.
+        "cache_version": 2,
     },
     {
         "key": "backgrounders",
