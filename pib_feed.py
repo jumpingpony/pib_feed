@@ -57,7 +57,7 @@ def _years_default() -> list[int]:
 
 
 YEARS = [int(y) for y in os.environ.get("PIB_YEARS", "").split(",") if y.strip()] or _years_default()
-WORKERS = int(os.environ.get("PIB_WORKERS", "8"))
+WORKERS = int(os.environ.get("PIB_WORKERS", "1"))
 TIMEOUT = int(os.environ.get("PIB_TIMEOUT", "30"))
 RETRIES = int(os.environ.get("PIB_RETRIES", "2"))
 SCAN_COUNT = int(os.environ.get("PIB_SCAN_COUNT", "500"))  # press_releases PRID window
@@ -75,6 +75,12 @@ FEEDS = [
         "mode": "prid",
         "english": True,
         "max_items": 500,
+        # Many releases are published in Hindi/regional first; their page links
+        # the English twin, so follow it instead of dropping the release.
+        "resolve_twin": True,
+        # v2 forces one rescan: the Oct 2026 title-markup break silently
+        # discarded fetched releases, and their ids are cached as checked.
+        "cache_version": 2,
     },
     {
         "key": "pmo",
@@ -146,6 +152,20 @@ def make_session() -> requests.Session:
     return s
 
 
+def _response_text(r: requests.Response) -> str:
+    """Decode without chardet when the media type makes sniffing pointless.
+
+    The builder's own feed.xml/cache.json are UTF-8 and can be multi-megabyte;
+    apparent_encoding over them costs seconds per file, per run.
+    """
+    ctype = r.headers.get("Content-Type", "").lower()
+    if "charset=" not in ctype and ("xml" in ctype or "json" in ctype):
+        r.encoding = "utf-8"
+    elif not r.encoding:
+        r.encoding = r.apparent_encoding or "utf-8"
+    return r.text
+
+
 def fetch(session: requests.Session, url: str, **kw) -> tuple[str | None, bool]:
     last = None
     is_transient = False
@@ -153,9 +173,11 @@ def fetch(session: requests.Session, url: str, **kw) -> tuple[str | None, bool]:
     for _ in range(RETRIES + 1):
         try:
             r = session.request(method, url, timeout=TIMEOUT, **kw)
-            if r.status_code == 200 and r.text:
-                r.encoding = r.apparent_encoding or "utf-8"
-                return r.text, False
+            if r.status_code == 200:
+                text = _response_text(r)
+                if text:
+                    return text, False
+                last = "empty body"
             elif r.status_code == 404:
                 return None, False
             else:
@@ -172,6 +194,9 @@ def fetch(session: requests.Session, url: str, **kw) -> tuple[str | None, bool]:
 
 # --- parsing (universal across all PIB detail pages) --------------------------
 TAG_RE = re.compile(r"<[^>]+>")
+# Oct 2026 template: the title moved to <h1 id="Titleh2">, leaving an empty
+# <h2> placeholder; earlier pages carried it in a real <h2>.
+TITLE_RE = re.compile(r'id="Titleh2"[^>]*>(.*?)</h[12]>', re.S | re.I)
 H2_RE = re.compile(r"<h2[^>]*>(.*?)</h2>", re.S | re.I)
 DATE_VAL_RE = re.compile(
     r"(\d{1,2})\s+([A-Za-z]{3,9})\s+(\d{4})\s+(\d{1,2}):(\d{2})\s*([AaPp][Mm])"
@@ -221,15 +246,23 @@ def _build_dt(day, mon, year, hh, mm, ap) -> dt.datetime | None:
         return None
 
 
-def parse_detail(page: str) -> dict:
-    """Extract title, IST date and full body HTML from any PIB detail page."""
-    # title: first non-masthead <h2>
-    title = ""
+def page_title(page: str) -> str:
+    """Title from the #Titleh2 heading, falling back to the legacy <h2>."""
+    m = TITLE_RE.search(page)
+    if m:
+        t = strip_tags(m.group(1))
+        if t:
+            return t
     for m in H2_RE.finditer(page):
         t = strip_tags(m.group(1))
         if t and not any(x in t for x in MASTHEAD):
-            title = t
-            break
+            return t
+    return ""
+
+
+def parse_detail(page: str) -> dict:
+    """Extract title, IST date and full body HTML from any PIB detail page."""
+    title = page_title(page)
     # date: the first timestamp before the "Last Updated" stamp is the posted date
     upd = UPDATED_RE.search(page)
     limit = upd.start() if upd else len(page)
@@ -308,18 +341,22 @@ def get_latest_prid(session: requests.Session, fallback: int | None = None) -> i
 
 # --- per-feed scrape ----------------------------------------------------------
 def scrape_one(session: requests.Session, feed: dict, item_id: int) -> tuple[dict | None, bool]:
-    if feed.get("resolve_twin"):
-        hindi, err = fetch(session, IFRAME.format(id=item_id))
-        if not hindi:
-            return None, err
-        m = ENGLISH_TWIN_RE.search(hindi)
+    detail = feed.get("detail", IFRAME)
+    page, err = fetch(session, detail.format(id=item_id))
+    if not page:
+        return None, err
+    # Non-English pages link their English twin ("English" anchor). Follow it so
+    # releases whose primary PRID is Hindi/regional still reach the feed.
+    if feed.get("english") and not is_english(page_title(page)):
+        if not feed.get("resolve_twin"):
+            return None, False
+        m = ENGLISH_TWIN_RE.search(page)
         if not m:
             return None, False  # no English version published
         item_id = int(m.group(1))  # scrape the English twin instead
-    detail_url = feed.get("detail", IFRAME).format(id=item_id)
-    page, err = fetch(session, detail_url)
-    if not page:
-        return None, err
+        page, err = fetch(session, detail.format(id=item_id))
+        if not page:
+            return None, err
     try:
         d = parse_detail(page)
     except Exception as e:  # pragma: no cover - defensive
@@ -336,21 +373,19 @@ def scrape_one(session: requests.Session, feed: dict, item_id: int) -> tuple[dic
 def collect_ids(session: requests.Session, feed: dict, checked: set[int] | None = None) -> list[int]:
     """Return candidate item ids, newest first, bounded for fetching."""
     if feed["mode"] == "prid":
-        fallback_prid = max(checked) if checked else None
-        latest = get_latest_prid(session, fallback_prid)
-        ids = []
-        consecutive_existing = 0
-        existing_keys = checked if checked is not None else set()
-        for i in range(latest, latest - SCAN_COUNT, -1):
-            if i in existing_keys:
-                consecutive_existing += 1
-                if consecutive_existing >= 25:
-                    break
-            else:
-                consecutive_existing = 0
-            ids.append(i)
-        print(f"  {feed['key']}: scanning PRIDs {ids[-1] if ids else latest}..{latest} ({len(ids)} candidates)")
-        return ids
+        checked = checked or set()
+        frontier = max(checked, default=0)
+        latest = get_latest_prid(session, frontier or None)
+        # Forward from the highest id ever attempted: everything above it is new,
+        # so there is no need to walk back over known ids. A cold start has no
+        # frontier and falls back to a bounded back-scan.
+        start = frontier + 1 if frontier else max(1, latest - SCAN_COUNT + 1)
+        window = list(range(start, latest + 1))[:SCAN_COUNT]
+        print(
+            f"  {feed['key']}: checking PRIDs "
+            f"{window[0] if window else '-'}..{latest} ({len(window)} candidates)"
+        )
+        return sorted(window, reverse=True)
     catalog: set[int] = set()
     for year in YEARS:
         got = list_year(session, feed, year)
@@ -384,24 +419,34 @@ def _block_date(block: str) -> dt.datetime:
     return dt.datetime(1970, 1, 1, tzinfo=dt.timezone.utc)
 
 
-def load_published(session: requests.Session, key: str) -> tuple[dict[int, str], set[int]]:
+def _load_cache(data: dict, version: int) -> tuple[set[int], set[int]]:
+    """Checked ids and transient-failure retry ids from a cache of this version."""
+    if data.get("v", 1) != version:
+        return set(), set()
+    return set(data.get("checked", [])), set(data.get("retry", []))
+
+
+def load_published(
+    session: requests.Session, feed: dict
+) -> tuple[dict[int, str], set[int], set[int]]:
+    key = feed["key"]
+    version = feed.get("cache_version", 1)
     body = None
     local_path = os.path.join(OUT_DIR, key, "feed.xml")
     cache_path = os.path.join(OUT_DIR, key, "cache.json")
     known_checked: set[int] = set()
+    retry_ids: set[int] = set()
     if os.path.exists(cache_path):
         try:
             with open(cache_path, encoding="utf-8") as f:
-                data = json.load(f)
-                known_checked = set(data.get("checked", []))
+                known_checked, retry_ids = _load_cache(json.load(f), version)
         except Exception:
             pass
     if not known_checked and PUBLISHED_BASE_URL:
         cache_body, _ = fetch(session, f"{PUBLISHED_BASE_URL}/{key}/cache.json")
         if cache_body:
             try:
-                data = json.loads(cache_body)
-                known_checked = set(data.get("checked", []))
+                known_checked, retry_ids = _load_cache(json.loads(cache_body), version)
             except Exception:
                 pass
 
@@ -414,7 +459,7 @@ def load_published(session: requests.Session, key: str) -> tuple[dict[int, str],
     if not body and PUBLISHED_BASE_URL:
         body, _ = fetch(session, f"{PUBLISHED_BASE_URL}/{key}/feed.xml")
     if not body:
-        return {}, known_checked
+        return {}, known_checked, retry_ids
     items: dict[int, str] = {}
     for m in ITEM_RE.finditer(body):
         block = m.group(0)
@@ -424,7 +469,7 @@ def load_published(session: requests.Session, key: str) -> tuple[dict[int, str],
             items[item_id] = block.strip()
             known_checked.add(item_id)
     print(f"  {key}: loaded {len(items)} published items ({len(known_checked)} total checked)")
-    return items, known_checked
+    return items, known_checked, retry_ids
 
 
 def render_item(a: dict) -> str:
@@ -477,7 +522,7 @@ def build_feed(feed: dict, items_by_id: dict[int, str]) -> str:
     )
 
 
-def write_feed(feed: dict, xml: str, count: int, checked: set[int]) -> None:
+def write_feed(feed: dict, xml: str, count: int, checked: set[int], retry: set[int]) -> None:
     d = os.path.join(OUT_DIR, feed["key"])
     os.makedirs(d, exist_ok=True)
     with open(os.path.join(d, "feed.xml"), "w", encoding="utf-8") as f:
@@ -492,7 +537,14 @@ def write_feed(feed: dict, xml: str, count: int, checked: set[int]) -> None:
             f"<p>{count} items. Rebuilt automatically.</p>"
         )
     with open(os.path.join(d, "cache.json"), "w", encoding="utf-8") as f:
-        json.dump({"checked": sorted(checked, reverse=True)[:2000]}, f)
+        json.dump(
+            {
+                "v": feed.get("cache_version", 1),
+                "checked": sorted(checked, reverse=True)[:2000],
+                "retry": sorted(retry)[:100],
+            },
+            f,
+        )
 
 
 def write_landing(counts: dict[str, int]) -> None:
@@ -506,9 +558,11 @@ def write_landing(counts: dict[str, int]) -> None:
 # --- main ---------------------------------------------------------------------
 def run_feed(session: requests.Session, feed: dict) -> int:
     print(f"[{feed['key']}]")
-    existing, checked = load_published(session, feed["key"])
+    existing, checked, retry = load_published(session, feed)
     ids = collect_ids(session, feed, checked)
-    to_fetch = [i for i in ids if i not in checked]
+    # Ids above the frontier plus ids whose earlier fetch failed transiently.
+    candidates = sorted(set(ids) | retry, reverse=True)
+    to_fetch = [i for i in candidates if i not in checked]
     print(f"  {feed['key']}: {len(to_fetch)} new items to scrape ({len(checked)} checked/cached)")
     found = 0
     if to_fetch:
@@ -517,15 +571,19 @@ def run_feed(session: requests.Session, feed: dict) -> int:
             for fut in as_completed(futures):
                 cand_id = futures[fut]
                 art, is_transient = fut.result()
-                if not is_transient:
+                if is_transient:
+                    retry.add(cand_id)
+                else:
+                    retry.discard(cand_id)
                     checked.add(cand_id)
                 if art:
                     existing[art["id"]] = render_item(art).strip()
                     checked.add(art["id"])
+                    retry.discard(art["id"])
                     found += 1
     xml = build_feed(feed, existing)
     kept = min(len(existing), feed["max_items"])
-    write_feed(feed, xml, kept, checked)
+    write_feed(feed, xml, kept, checked, retry)
     print(f"  {feed['key']}: fetched {found}, feed now {kept}")
     return kept
 

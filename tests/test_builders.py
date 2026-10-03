@@ -4,6 +4,7 @@ import json
 import os
 import re
 import sys
+import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -14,6 +15,7 @@ import meca
 import mygov
 import newsonair_feed
 import niti
+import pib_feed
 import toi
 import visioniaspt365
 
@@ -337,6 +339,99 @@ class TestEconomistBuilder(unittest.TestCase):
         self.assertEqual(feed["days"], 14)
 
 
+class TestPibBuilder(unittest.TestCase):
+    """PIB: title markup change, English-twin follow, forward PRID scan."""
+
+    @staticmethod
+    def _press_feed():
+        return next(f for f in pib_feed.FEEDS if f["key"] == "press_releases")
+
+    def test_parse_detail_reads_title_from_titleh2(self):
+        # Oct 2026 template: title moved from <h2> to <h1 id="Titleh2">,
+        # the old <h2> is an empty placeholder.
+        page = (
+            "<html><body>"
+            '<h1 id="Titleh2">Cabinet approves scheme</h1>'
+            "<h2><br></h2>"
+            "<div>03 Oct 2026 12:18 PM</div>"
+            "</body></html>"
+        )
+        self.assertEqual(pib_feed.parse_detail(page)["title"], "Cabinet approves scheme")
+
+    def test_parse_detail_falls_back_to_h2_title(self):
+        page = "<h2>Legacy h2 title</h2><p>03 Oct 2026 12:18 PM</p>"
+        self.assertEqual(pib_feed.parse_detail(page)["title"], "Legacy h2 title")
+
+    def test_scrape_one_follows_english_twin(self):
+        hindi = (
+            '<h1 id="Titleh2">केंद्रीय मंत्री ने योजना को मंजूरी दी</h1>'
+            '<a href="PressReleaseIframePage.aspx?PRID=200">English</a>'
+            "<p>03 Oct 2026 12:18 PM</p>"
+        )
+        english = (
+            '<h1 id="Titleh2">Union Minister approves scheme</h1>'
+            "<p>03 Oct 2026 12:18 PM</p>"
+            "<p>Body text.</p>"
+        )
+
+        def fake_fetch(session, url, **kw):
+            return (hindi if "PRID=100" in url else english), False
+
+        with patch("pib_feed.fetch", side_effect=fake_fetch):
+            art, err = pib_feed.scrape_one(MagicMock(), self._press_feed(), 100)
+        self.assertIsNotNone(art, f"expected twin article, err={err}")
+        self.assertEqual(art["id"], 200)
+        self.assertEqual(art["title"], "Union Minister approves scheme")
+        self.assertIn("PRID=200", art["link"])
+
+    def test_collect_ids_scans_forward_from_checked(self):
+        checked = set(range(105, 109))
+        with patch("pib_feed.get_latest_prid", return_value=110):
+            ids = pib_feed.collect_ids(MagicMock(), self._press_feed(), checked)
+        self.assertEqual(ids, [110, 109])
+
+    def test_collect_ids_cold_start_bounded(self):
+        with patch("pib_feed.get_latest_prid", return_value=110), patch(
+            "pib_feed.SCAN_COUNT", 5
+        ):
+            ids = pib_feed.collect_ids(MagicMock(), self._press_feed(), set())
+        self.assertEqual(ids, [110, 109, 108, 107, 106])
+
+    def test_load_published_ignores_unversioned_cache(self):
+        with tempfile.TemporaryDirectory() as td, patch.object(
+            pib_feed, "OUT_DIR", td
+        ), patch.object(pib_feed, "PUBLISHED_BASE_URL", ""):
+            os.makedirs(os.path.join(td, "press_releases"), exist_ok=True)
+            with open(os.path.join(td, "press_releases", "cache.json"), "w") as f:
+                json.dump({"checked": [1, 2, 3]}, f)
+            _, checked, retry = pib_feed.load_published(MagicMock(), self._press_feed())
+            self.assertEqual(checked, set())
+            self.assertEqual(retry, set())
+
+    def test_year_feed_accepts_unversioned_cache(self):
+        # Only press_releases bumped its cache version; year feeds keep their
+        # checked ids so a deploy does not trigger a mass rescan.
+        feed = next(f for f in pib_feed.FEEDS if f["key"] == "backgrounders")
+        with tempfile.TemporaryDirectory() as td, patch.object(
+            pib_feed, "OUT_DIR", td
+        ), patch.object(pib_feed, "PUBLISHED_BASE_URL", ""):
+            os.makedirs(os.path.join(td, "backgrounders"), exist_ok=True)
+            with open(os.path.join(td, "backgrounders", "cache.json"), "w") as f:
+                json.dump({"checked": [1, 2, 3]}, f)
+            _, checked, retry = pib_feed.load_published(MagicMock(), feed)
+            self.assertEqual(checked, {1, 2, 3})
+            self.assertEqual(retry, set())
+
+    def test_cache_roundtrip_keeps_retry(self):
+        with tempfile.TemporaryDirectory() as td, patch.object(
+            pib_feed, "OUT_DIR", td
+        ), patch.object(pib_feed, "PUBLISHED_BASE_URL", ""):
+            pib_feed.write_feed(self._press_feed(), "<rss/>", 0, {5, 6}, {7})
+            _, checked, retry = pib_feed.load_published(MagicMock(), self._press_feed())
+            self.assertEqual(checked, {5, 6})
+            self.assertEqual(retry, {7})
+
+
 class TestNewsOnAirPodcast(unittest.TestCase):
     def test_categories_configuration(self):
         expected_slugs = {
@@ -489,6 +584,68 @@ class TestNewsOnAirPodcast(unittest.TestCase):
         self.assertIn("<ol>\n<li>Headline 1</li>\n<li>Headline 2</li>\n</ol>", bulletin["body_html"])
         self.assertIn("<p>Intro news.</p>", bulletin["body_html"])
         self.assertIn("<p>Outro news.</p>", bulletin["body_html"])
+
+    def test_collect_bulletins_does_not_refetch_published(self):
+        cat = newsonair_feed.CATEGORIES["parikrama"]
+        published = {"https://newsonair.gov.in/bulletins-detail/parikrama-900/"}
+        cat_page = '<a href="/bulletins-detail/parikrama-902/">Details</a>'
+
+        def fake_fetch(session, url, **kw):
+            if "bulletins-detail-category" in url:
+                return cat_page
+            return None
+
+        def fake_scrape(session, cat_info, url):
+            return {"link": url}
+
+        with patch("newsonair_feed.fetch", side_effect=fake_fetch), patch(
+            "newsonair_feed.scrape_bulletin", side_effect=fake_scrape
+        ):
+            arts = newsonair_feed.collect_bulletins(MagicMock(), cat, published)
+
+        urls = [a["link"] for a in arts]
+        self.assertNotIn(
+            "https://newsonair.gov.in/bulletins-detail/parikrama-900/", urls
+        )
+        self.assertIn("https://newsonair.gov.in/bulletins-detail/parikrama-901/", urls)
+        self.assertIn("https://newsonair.gov.in/bulletins-detail/parikrama-902/", urls)
+
+    def test_xml_response_skips_chardet(self):
+        class FakeResponse:
+            headers = {"Content-Type": "application/xml"}
+            encoding = None
+            text = "<rss/>"
+
+            @property
+            def apparent_encoding(self):
+                raise AssertionError("chardet should not run on xml")
+
+        self.assertEqual(newsonair_feed._response_text(FakeResponse()), "<rss/>")
+
+
+class TestFetchEncoding(unittest.TestCase):
+    def test_xml_response_skips_chardet(self):
+        class FakeResponse:
+            headers = {"Content-Type": "application/xml"}
+            encoding = None
+            text = "<rss/>"
+
+            @property
+            def apparent_encoding(self):
+                raise AssertionError("chardet should not run on xml")
+
+        self.assertEqual(pib_feed._response_text(FakeResponse()), "<rss/>")
+
+    def test_html_response_uses_chardet_when_undeclared(self):
+        class FakeResponse:
+            headers = {"Content-Type": "text/html"}
+            encoding = None
+            text = "<html/>"
+            apparent_encoding = "utf-8"
+
+        response = FakeResponse()
+        self.assertEqual(pib_feed._response_text(response), "<html/>")
+        self.assertEqual(response.encoding, "utf-8")
 
 
 class TestToiBuilder(unittest.TestCase):

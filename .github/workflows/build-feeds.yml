@@ -66,7 +66,7 @@ jobs:
         id: pib
         continue-on-error: true
         env:
-          PIB_WORKERS: "10"
+          PIB_WORKERS: "1"
           # Merge with the already-published feeds so history is retained beyond
           # the scan window. Each feed reads <base>/<key>/feed.xml.
           PIB_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
@@ -76,7 +76,7 @@ jobs:
         id: newsonair
         continue-on-error: true
         env:
-          NOA_WORKERS: "3"
+          NOA_WORKERS: "1"
           # Same history-retention trick: read each already-published feed from
           # <base>/<key>/feed.xml and merge, so feeds grow past the source window.
           NOA_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"

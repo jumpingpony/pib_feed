@@ -30,8 +30,10 @@ So this project reconstructs six clean RSS 2.0 feeds with full bodies.
 
 `pib_feed.py` builds all six feeds in one run:
 
-- **Press Releases** — finds the newest `PRID` from `allRel.aspx`, scans the
-  latest `PIB_SCAN_COUNT` PRIDs, and keeps the English ones.
+- **Press Releases** — finds the newest `PRID` from `allRel.aspx`, then walks
+  forward from the highest PRID it has already seen (`PIB_SCAN_COUNT` per run).
+  Hindi/regional pages link their English twin, which is followed so the release
+  still lands in the English feed.
 - **PMO** — replays the year `ddlYear` postback on `PMContents.aspx` to collect
   release `PRID`s, then keeps the English ones.
 - **Backgrounders / Factsheets / Features / FAQs** — replay the `ddlYear`
@@ -54,8 +56,8 @@ per-item `<description>` summary, and the full body in `<content:encoded>`.
 | Var | Default | Meaning |
 |-----|---------|---------|
 | `PIB_YEARS` | current year … 2022 | Comma-separated years for the listing feeds |
-| `PIB_SCAN_COUNT` | `500` | PRID window for the press-releases feed |
-| `PIB_WORKERS` | `8` | Concurrent fetchers |
+| `PIB_SCAN_COUNT` | `500` | Max new PRIDs walked per run for the press-releases feed |
+| `PIB_WORKERS` | `1` | Concurrent fetchers (keep at 1 to stay polite) |
 | `PIB_PUBLISHED_BASE_URL` | – | Base URL of the live site; per-feed history is read from `<base>/<key>/feed.xml` |
 | `PIB_OUT_DIR` | `public` | Output directory |
 
@@ -104,7 +106,7 @@ AIR's signature content) have **no working official feed**, so there is no way t
 
 `newsonair_feed.py` builds the consolidated feed in one unified pipeline:
 
-- **Bulletins & Magazines** — enumerates 5 core categories (**Morning News**, **Midday News**, **Evening News**, **Parikrama**, and **Aaj Savere**) via category listing pages and sequential IDs. Each bulletin detail page is server-rendered, so the full transcript is extracted from its `entry-content` container into `<content:encoded>`.
+- **Bulletins & Magazines** — enumerates 5 core categories (**Morning News**, **Midday News**, **Evening News**, **Parikrama**, and **Aaj Savere**) via category listing pages and sequential IDs. Only bulletins newer than the newest already-published one are fetched; published URLs are never re-scraped. Each bulletin detail page is server-rendered, so the full transcript is extracted from its `entry-content` container into `<content:encoded>`.
 - **Audio Enclosures** — indexes `.mp3` broadcast recordings from `/news-magazine/`, `/daily-broadcast/`, and `/national-bulletins/`, matches episodes by show name and publication date, and performs 1-byte Range requests to determine the exact `Content-Length` for the `<enclosure>` tag.
 - **Podcast Metadata** — embeds official square show artwork, `<itunes:duration>`, `<itunes:image>`, `<itunes:author>`, and `<itunes:category text="News"><itunes:category text="Daily News" /></itunes:category>` following the iTunes podcast DTD.
 - **History & Retention** — merges newly scraped items with previously published history (and migrates legacy per-category feeds), sorted newest-first and capped at 300 items. Output is written to `public/newsonair/feed.xml` + `public/newsonair/index.html`.
@@ -113,9 +115,10 @@ AIR's signature content) have **no working official feed**, so there is no way t
 
 | Var | Default | Meaning |
 |-----|---------|---------|
-| `NOA_WORKERS` | `3` | Concurrent fetchers (bulletin details) |
+| `NOA_WORKERS` | `1` | Concurrent fetchers (keep at 1 to stay polite) |
 | `NOA_TIMEOUT` | `20` | HTTP timeout in seconds |
 | `NOA_RETRIES` | `1` | Retry attempts for transient errors |
+| `NOA_REFRESH_RECENT` | `0` | Re-fetch the last N bulletins per category even if published (0 = off; set only for a manual one-off re-render) |
 | `NOA_PUBLISHED_BASE_URL` | – | Base URL of the live site; published history is read from `<base>/newsonair/feed.xml` |
 | `NOA_OUT_DIR` | `public` | Output directory |
 

@@ -36,14 +36,16 @@ UA = (
 IST = dt.timezone(dt.timedelta(hours=5, minutes=30))
 
 # --- global tunables ----------------------------------------------------------
-WORKERS = int(os.environ.get("NOA_WORKERS", "3"))
+WORKERS = int(os.environ.get("NOA_WORKERS", "1"))
 TIMEOUT = int(os.environ.get("NOA_TIMEOUT", "20"))
 RETRIES = int(os.environ.get("NOA_RETRIES", "1"))
 DELAY = float(os.environ.get("NOA_DELAY", "0.3"))
 RETRY_GAP = 1.0
 OUT_DIR = os.environ.get("NOA_OUT_DIR", "public")
 PUBLISHED_BASE_URL = os.environ.get("NOA_PUBLISHED_BASE_URL", "").strip().rstrip("/")
-REFRESH_RECENT = int(os.environ.get("NOA_REFRESH_RECENT", "20"))
+# 0 = only fetch bulletins newer than the newest published one. Raise it only
+# for a manual one-off re-render of the last N bulletins per category.
+REFRESH_RECENT = int(os.environ.get("NOA_REFRESH_RECENT", "0"))
 SCAN_COUNT = int(os.environ.get("NOA_SCAN_COUNT", os.environ.get("NOA_BULLETIN_PAGES", "20")))
 
 FEED_KEY = "newsonair"
@@ -119,6 +121,20 @@ def make_session() -> requests.Session:
     return s
 
 
+def _response_text(r: requests.Response) -> str:
+    """Decode without chardet when the media type makes sniffing pointless.
+
+    The builder's own feed.xml/cache.json are UTF-8; apparent_encoding over a
+    multi-megabyte feed costs seconds per run.
+    """
+    ctype = r.headers.get("Content-Type", "").lower()
+    if "charset=" not in ctype and ("xml" in ctype or "json" in ctype):
+        r.encoding = "utf-8"
+    elif not r.encoding:
+        r.encoding = r.apparent_encoding or "utf-8"
+    return r.text
+
+
 def fetch(session: requests.Session, url: str, **kw) -> str | None:
     last = None
     method = kw.pop("method", "get")
@@ -128,12 +144,15 @@ def fetch(session: requests.Session, url: str, **kw) -> str | None:
             time.sleep(RETRY_GAP * attempt)
         try:
             r = session.request(method, url, timeout=TIMEOUT, **kw)
-            if r.status_code == 200 and r.text:
-                r.encoding = r.apparent_encoding or "utf-8"
-                return r.text
-            if r.status_code in (404,):
+            if r.status_code == 200:
+                text = _response_text(r)
+                if text:
+                    return text
+                last = "empty body"
+            elif r.status_code == 404:
                 return None
-            last = f"HTTP {r.status_code}"
+            else:
+                last = f"HTTP {r.status_code}"
         except requests.RequestException as e:  # pragma: no cover - network
             last = str(e)
     if last:
