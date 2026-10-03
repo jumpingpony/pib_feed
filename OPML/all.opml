@@ -85,5 +85,12 @@
       <outline text="The Times of India (unofficial, full-text)" title="The Times of India (unofficial, full-text)">
         <outline type="rss" text="Swaminomics - Swaminathan S Anklesaria Aiyar" title="Swaminomics - Swaminathan S Anklesaria Aiyar" xmlUrl="https://jumpingpony.github.io/pib_feed/toi-swami-nomics/feed.xml" htmlUrl="https://timesofindia.indiatimes.com/toi-plus/author-swaminathansanklesariaaiyar-18032"/>
       </outline>
+      <outline text="ThePrint (unofficial, full-text)" title="ThePrint (unofficial, full-text)">
+        <outline type="rss" text="National Interest - ThePrint" title="National Interest - ThePrint" xmlUrl="https://jumpingpony.github.io/pib_feed/theprint-national-interest/feed.xml" htmlUrl="https://theprint.in/category/national-interest/"/>
+        <outline type="rss" text="Essential - ThePrint" title="Essential - ThePrint" xmlUrl="https://jumpingpony.github.io/pib_feed/theprint-essential/feed.xml" htmlUrl="https://theprint.in/category/theprint-essential/"/>
+        <outline type="rss" text="50-Word Edit - ThePrint" title="50-Word Edit - ThePrint" xmlUrl="https://jumpingpony.github.io/pib_feed/theprint-50-word-edit/feed.xml" htmlUrl="https://theprint.in/category/50-word-edit/"/>
+        <outline type="rss" text="Diplomacy - ThePrint" title="Diplomacy - ThePrint" xmlUrl="https://jumpingpony.github.io/pib_feed/theprint-diplomacy/feed.xml" htmlUrl="https://theprint.in/category/diplomacy/"/>
+        <outline type="rss" text="PastForward - ThePrint" title="PastForward - ThePrint" xmlUrl="https://jumpingpony.github.io/pib_feed/theprint-past-forward/feed.xml" htmlUrl="https://theprint.in/category/past-forward/"/>
+      </outline>
   </body>
 </opml>

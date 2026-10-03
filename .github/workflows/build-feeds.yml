@@ -26,6 +26,7 @@ on:
       - indiasworld.py
       - frontline.py
       - toi.py
+      - theprint.py
       - archive_pdfs.py
       - .github/workflows/build-feeds.yml
 
@@ -216,6 +217,15 @@ jobs:
           TOI_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
         run: python toi.py
 
+      - name: Build ThePrint feeds
+        id: theprint
+        continue-on-error: true
+        env:
+          # Merge with the already-published feeds so history is retained
+          # beyond the REST window.
+          TP_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+        run: python theprint.py
+
       - name: Mirror PDFs to the archive release
         id: archive_pdfs
         continue-on-error: true
@@ -261,6 +271,7 @@ jobs:
             [IndiasWorld]="${{ steps.indiasworld.outcome }}"
             [Frontline]="${{ steps.frontline.outcome }}"
             [TimesOfIndia]="${{ steps.toi.outcome }}"
+            [ThePrint]="${{ steps.theprint.outcome }}"
             [ArchivePDFs]="${{ steps.archive_pdfs.outcome }}"
             [VerifyArchives]="${{ steps.verify_archives.outcome }}"
           )

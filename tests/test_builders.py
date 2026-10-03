@@ -16,6 +16,7 @@ import mygov
 import newsonair_feed
 import niti
 import pib_feed
+import theprint
 import toi
 import visioniaspt365
 
@@ -646,6 +647,67 @@ class TestFetchEncoding(unittest.TestCase):
         response = FakeResponse()
         self.assertEqual(pib_feed._response_text(response), "<html/>")
         self.assertEqual(response.encoding, "utf-8")
+
+
+class TestThePrintBuilder(unittest.TestCase):
+    """ThePrint: REST discovery, promo stripping, responsive images."""
+
+    def test_feeds_match_inoreader_subscriptions(self):
+        keys = {f["key"] for f in theprint.FEEDS}
+        self.assertEqual(
+            keys,
+            {
+                "theprint-national-interest",
+                "theprint-essential",
+                "theprint-50-word-edit",
+                "theprint-diplomacy",
+                "theprint-past-forward",
+            },
+        )
+        for feed in theprint.FEEDS:
+            self.assertTrue(feed["section"].startswith("https://theprint.in/category/"))
+            self.assertIsInstance(feed["cat"], int)
+
+    def test_sanitize_body_strips_promos_and_attributes(self):
+        raw = (
+            '<p><span style="font-weight: 400;">Opening <strong class="ep-highlight">word</strong>.</span></p>'
+            '<p><em><strong>Also Read:</strong> <a href="https://theprint.in/x/">Related piece</a></em></p>'
+            "<hr />"
+            "<p>&nbsp;</p>"
+            '<figure><img src="https://staticprintenglish.theprint.in/a.jpg" width="800" height="400" />'
+            "<figcaption>A caption</figcaption></figure>"
+            "<p><i>Disclaimer: This report is auto generated.</i></p>"
+            "<p>Edited by Test Editor</p>"
+        )
+        body = theprint.sanitize_body(raw)
+        self.assertIn("Opening <strong>word</strong>.", body)
+        self.assertNotIn("Also Read", body)
+        self.assertNotIn("Disclaimer", body)
+        self.assertIn("Edited by Test Editor", body)  # attribution is kept
+        self.assertNotIn("style=", body.replace('style="max-width:100%;height:auto;"', ""))
+        self.assertNotIn("class=", body)
+        self.assertNotIn("<hr", body)
+        self.assertIn(
+            '<figure><img src="https://staticprintenglish.theprint.in/a.jpg" alt="" '
+            'style="max-width:100%;height:auto;" /><figcaption>A caption</figcaption></figure>',
+            body,
+        )
+
+    def test_render_item_and_guid_roundtrip(self):
+        post = {
+            "id": 3060655,
+            "date": "2026-10-03T00:11:44",
+            "link": "https://theprint.in/50-word-edit/some-piece/3060655/",
+            "title": {"rendered": "India and Pakistan have shaken hands"},
+            "content": {"rendered": "<p>Fifty words.</p>"},
+        }
+        item = theprint.render_item(post)
+        self.assertIn("<title>India and Pakistan have shaken hands</title>", item)
+        self.assertIn("<guid isPermaLink=\"true\">https://theprint.in/50-word-edit/some-piece/3060655/</guid>", item)
+        self.assertIn("<content:encoded><![CDATA[<p>Fifty words.</p>]]></content:encoded>", item)
+        match = theprint.GUID_ID_RE.search("https://theprint.in/50-word-edit/some-piece/3060655/")
+        self.assertIsNotNone(match)
+        self.assertEqual(int(match.group(1)), 3060655)
 
 
 class TestToiBuilder(unittest.TestCase):

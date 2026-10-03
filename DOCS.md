@@ -971,10 +971,58 @@ Swaminathan S. Anklesaria Aiyar's columns appear on TOI Plus under author profil
 
 ---
 
+# ThePrint feeds — full-text (unofficial)
+
+Full-text RSS feeds for the [ThePrint](https://theprint.in) sections subscribed
+in Inoreader, built by `theprint.py`:
+
+| Feed | What | GitHub Pages |
+|------|------|------|
+| National Interest | weekly national-affairs column | [feed.xml](https://jumpingpony.github.io/pib_feed/theprint-national-interest/feed.xml) |
+| Essential | daily explainers | [feed.xml](https://jumpingpony.github.io/pib_feed/theprint-essential/feed.xml) |
+| 50-Word Edit | daily 50-word editorials | [feed.xml](https://jumpingpony.github.io/pib_feed/theprint-50-word-edit/feed.xml) |
+| Diplomacy | foreign-affairs coverage | [feed.xml](https://jumpingpony.github.io/pib_feed/theprint-diplomacy/feed.xml) |
+| PastForward | history features | [feed.xml](https://jumpingpony.github.io/pib_feed/theprint-past-forward/feed.xml) |
+
+## Why this exists
+
+ThePrint's own RSS feeds are summary-only (`ThePrint view on the most important
+issues.`) and occasionally answer with an anti-robot page.
+
+## How it works
+
+- Discovery and full text come from the WordPress REST API
+  (`/wp-json/wp/v2/posts?categories=<id>&after=<iso>`), which is served by
+  CloudFront without challenges and returns `content.rendered`.
+- Each run backfills the last `TP_DAYS` (default 21) and merges the published
+  copy, so history survives beyond the window.
+- Bodies keep paragraphs, headings, quotes, lists, links and responsive
+  images; `Also Read:` / `Read More:` related-link blocks and auto-generated
+  disclaimers are dropped. `Edited by ...` credits are attribution and stay.
+
+## Configuration (env vars)
+
+| Var | Default | Meaning |
+|-----|---------|---------|
+| `TP_DAYS` | `21` | Backfill window in days |
+| `TP_MAX_ITEMS` | `300` | Item cap per feed |
+| `TP_TIMEOUT` | `30` | HTTP timeout in seconds |
+| `TP_RETRIES` | `2` | HTTP retry attempts |
+| `TP_PUBLISHED_BASE_URL` | – | Live-site base for history-merge |
+| `TP_OUT_DIR` | `public` | Output directory |
+
+## Caveats
+
+- Category IDs are pinned in the `FEEDS` table; new sections need a new entry.
+- Unofficial and unaffiliated; content © ThePrint.
+
+---
+
 # OPML
 
 Ready-to-import OPML bundles live in `OPML/`: `pib.opml`, `newsonair.opml`,
 `current-affairs.opml`, `mygov.opml`, `scobserver.opml`, `prsindia.opml`,
 `idsa.opml`, `eacpm.opml`, `economist.opml`, `projectsyndicate.opml`,
 `indianexpress.opml` (includes UPSC Essentials), `indiatoday.opml`, `niti.opml`,
-`ipcs.opml`, `indiasworld.opml`, `frontline.opml`, `toi.opml`, and `all.opml` (every feed, grouped).
+`ipcs.opml`, `indiasworld.opml`, `frontline.opml`, `toi.opml`,
+`theprint.opml`, and `all.opml` (every feed, grouped).
