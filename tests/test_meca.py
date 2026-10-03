@@ -57,6 +57,25 @@ class TestMecaNextias(unittest.TestCase):
         self.assertEqual(meca._guid_id(std_xml), 2024110)
         self.assertEqual(meca._guid_id(crux_xml), 2024121)
 
+    def test_august_crux_detection(self):
+        """Ensure August 2026 edition without '(THE CRUX)' in title is detected as Crux."""
+        fake_rec = {
+            "title": "August, 2026",
+            "pdf": "https://www.nextias.com/magazines/monthly-current-affairs-august-2026.pdf",
+        }
+        original_nx_page = meca._nx_page
+        try:
+            meca._nx_page = lambda session, yr, start: [fake_rec] if yr == 2026 and start == 0 else []
+            arts = meca.collect_nextias(None, newest_id=0)
+            self.assertEqual(len(arts), 1)
+            item = arts[0]
+            self.assertEqual(item["id"], 2026081)
+            self.assertEqual(item["title"], "Monthly Current Affairs — August 2026 (The Crux)")
+            self.assertEqual(item["archival_name"], "nextias_monthly-current-affairs_2026-08_crux.pdf")
+            self.assertEqual(item["date"].day, 15)
+        finally:
+            meca._nx_page = original_nx_page
+
 
 if __name__ == "__main__":
     unittest.main()

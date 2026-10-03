@@ -222,7 +222,12 @@ def collect_nextias(session: requests.Session, newest_id: int = 0) -> list[dict]
                 yr = int(tm.group(2))
                 if not mon:
                     continue
-                crux = "crux" in title_raw.lower()
+                crux = (
+                    "crux" in title_raw.lower()
+                    or "crux" in pdf.lower()
+                    or yr > 2024
+                    or (yr == 2024 and mon >= 12)
+                )
                 item_id = (yr * 100 + mon) * 10 + (1 if crux else 0)
                 if item_id <= newest_id:
                     continue
@@ -306,8 +311,12 @@ def _guid_id(block: str) -> int | None:
     if not m:
         return None
     val = int(m.group(1))
-    if "nextias" in g.group(1) and val < 1000000:
-        return val * 10 + (1 if "(The Crux)" in block or "(THE CRUX)" in block else 0)
+    if "nextias" in g.group(1):
+        if val < 1000000:
+            crux = "(The Crux)" in block or "(THE CRUX)" in block or val > 202411
+            return val * 10 + (1 if crux else 0)
+        if val > 2024111 and val % 10 == 0:
+            return val + 1
     return val
 
 
