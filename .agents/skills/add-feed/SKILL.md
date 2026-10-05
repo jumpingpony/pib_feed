@@ -169,6 +169,14 @@ Consult this non-exhaustive reference checklist during research for inspiration,
    - Document feed details, source mechanics, and variables in `DOCS.md`.
    - Create `OPML/<source>.opml`.
    - Add feed entries to `OPML/all.opml`.
-5. **Reader Subscription**:
-   - If Inoreader integration is requested, use OAuth credentials in `.inoreaderconfig`.
-   - Call `subscription/quickadd` followed by `subscription/edit` to assign to target folder.
+5. **Local Run, Commit, Push, Watch**:
+   - Run the builder locally with a narrow scope; confirm the emitted `<OUT_DIR>/<key>/feed.xml` parses, is non-empty, is reverse-chronological, and carries full bodies.
+   - If it works locally, commit and push.
+   - Watch the triggered run to completion (`gh run watch <run-id> --exit-status`); proceed only on success.
+   - Verify the deployed feed over HTTP at `<PUBLISHED_BASE_URL>/<key>/feed.xml`.
+6. **Reader Subscription** (only after a green run):
+   - If Inoreader integration is requested, use the OAuth credentials in `.inoreaderconfig`; `scripts/inoreader_migrate.py` shows the API pattern.
+   - **Ask the user which folder** to file the feed under; do not assume one. Present the locally cached folder list from `scratch/inoreader_folders.json` (gitignored).
+   - **Conserve Inoreader's quota (~100 requests/day)**: use the cache for folder choices and refresh it only when the user asks; keep the subscription itself to `subscription/quickadd`, then `subscription/edit` (`ac=edit`, `s=<streamId>`, `t=<title>`, `a=user/-/label/<folder>`), plus at most one verifying `subscription/list`.
+   - If the API answers 401, refresh the access token first with the `refresh_token` grant on `https://www.inoreader.com/oauth2/token` (`client_id=app_id`, `client_secret=app_key`) and persist it.
+   - Verify and report the feed title and folder.
