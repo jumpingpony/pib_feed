@@ -723,6 +723,7 @@ Full-text RSS feeds for [The Economist](https://www.economist.com), built by
 | By Invitation | guest commentary from outside contributors | [feed.xml](https://jumpingpony.github.io/pib_feed/economist-by-invitation/feed.xml) |
 | Finance & economics | the weekly Finance & economics articles | [feed.xml](https://jumpingpony.github.io/pib_feed/economist-finance-and-economics/feed.xml) |
 | Economic & financial indicators | the weekly economic-data & chart pages | [feed.xml](https://jumpingpony.github.io/pib_feed/economist-indicators/feed.xml) |
+| Leaders | the weekly Leaders editorials | [feed.xml](https://jumpingpony.github.io/pib_feed/economist-leaders/feed.xml) |
 | Podcasts | direct MP3 enclosures and complete transcripts | [feed.xml](https://jumpingpony.github.io/pib_feed/economist-podcasts/feed.xml) |
 
 ## Configuration (env vars)
@@ -730,6 +731,7 @@ Full-text RSS feeds for [The Economist](https://www.economist.com), built by
 | Var | Default | Meaning |
 |-----|---------|---------|
 | `ECON_DAYS` / `ECON_ALL_DAYS` | `14` | Rolling publication window in days for all-articles feed |
+| `ECON_LEADERS_DAYS` | `21` | Rolling publication window in days for the Leaders feed backfill |
 | `ECON_PUBLISHED_BASE_URL` | – | Live-site base for history-merge |
 | `ECON_ARCHIVE_MODE` | `link` | `archive` rewrites body images to the release copy |
 | `ECON_ARCHIVE_BASE_URL` | – | Release base URL with `{year}` images point at in archive mode, e.g. `https://github.com/<owner>/<repo>/releases/download/economist-images-{year}` |

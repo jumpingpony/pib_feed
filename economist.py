@@ -1,18 +1,13 @@
 #!/usr/bin/env python3
 """Build full-text RSS feeds from The Economist (economist.com).
 
-NOTE: Omitted from CI workflows (.github/workflows/build-feeds.yml).
-Full article body text is gated behind paywalls on server-side fetches, and
-images require release mirroring. Official feeds are used in OPML instead.
-Retained for local or manual runs.
-
-The Economist is doubly locked down: Cloudflare fronts the whole site with a
-JavaScript challenge (plain requests / cloudscraper / spoofed bot UAs all get
-403), and the articles themselves sit behind the Zephr paywall. Both are
-defeated by a single trick lifted from the Bypass-Paywalls-Clean rule for
-economist.com — a custom mobile User-Agent whose tail token ("Liskov") the
-site treats as a whitelisted crawler. With that UA a normal GET returns 200
-and the **full** article payload, Cloudflare and paywall included.
+The Economist is double-locked: DataDome challenges direct HTML GETs (plain
+requests / spoofed bot UAs get 403), and articles sit behind the Zephr
+paywall. The way through, carried over from the Bypass-Paywalls-Clean rule for
+economist.com, is a custom mobile User-Agent whose tail token ("Liskov") the
+site still treats as a whitelisted crawler. With it the section RSS feeds and
+the Next.js data routes return 200 and the **full** article payload; only the
+HTML views stay challenged.
 
 The site is a Next.js app: every page embeds a `<script id="__NEXT_DATA__">`
 JSON blob under `props.pageProps.content`. Listing/topic pages expose
@@ -83,6 +78,7 @@ ARCHIVE_BASE_URL = os.environ.get("ECON_ARCHIVE_BASE_URL", "").strip().rstrip("/
 ARCHIVE_DIR = os.environ.get("ECON_ARCHIVE_MANIFEST_DIR", "image_archive")
 DEFAULT_DAYS = 14
 ALL_DAYS = int(os.environ.get("ECON_ALL_DAYS", os.environ.get("ECON_DAYS", str(DEFAULT_DAYS))))
+LEADERS_DAYS = int(os.environ.get("ECON_LEADERS_DAYS", "21"))
 
 FEEDS = {
     "economist-all": {
@@ -93,6 +89,16 @@ FEEDS = {
         "rss": f"{BASE}/latest/rss.xml",
         "days": ALL_DAYS,
         "max_items": 300,
+        "archive_images": True,
+    },
+    "economist-leaders": {
+        "title": "Leaders - Economist",
+        "desc": "Unofficial full-text feed of The Economist's Leaders editorials.",
+        "page": f"{BASE}/leaders",
+        "html": f"{BASE}/leaders",
+        "rss": f"{BASE}/leaders/rss.xml",
+        "days": LEADERS_DAYS,
+        "max_items": 120,
         "archive_images": True,
     },
     "economist-indicators": {
