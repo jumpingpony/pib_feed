@@ -29,7 +29,7 @@
       <outline text="Supreme Court Observer" title="Supreme Court Observer">
         <outline type="rss" text="Cases - Supreme Court Observer" title="Cases - Supreme Court Observer" xmlUrl="https://jumpingpony.github.io/pib_feed/scobserver_cases/feed.xml" htmlUrl="https://www.scobserver.in/cases/"/>
         <outline type="rss" text="Journal - Supreme Court Observer" title="Journal - Supreme Court Observer" xmlUrl="https://jumpingpony.github.io/pib_feed/scobserver-journal/feed.xml" htmlUrl="https://www.scobserver.in/journal/"/>
-        <outline type="rss" text="Reports - Supreme Court Observer" title="Reports - Supreme Court Observer" xmlUrl="https://jumpingpony.github.io/pib_feed/scobserver-reports/feed.xml" htmlUrl="https://www.scobserver.in/reports/"/>
+        <outline type="rss" text="Reports - Supreme Court Observer" title="Reports - Supreme Court Observer" xmlUrl="https://jumpingpony.github.io/pib_feed/scobserver-reports/feed.xml" htmlUrl="https://www.scobserver.in/"/>
       </outline>
       <outline text="PRS Legislative Research" title="PRS Legislative Research">
         <outline type="rss" text="Bills - PRS" title="Bills - PRS" xmlUrl="https://jumpingpony.github.io/pib_feed/prs-bills/feed.xml" htmlUrl="https://prsindia.org/billtrack"/>
