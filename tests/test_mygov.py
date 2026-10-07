@@ -68,6 +68,39 @@ SAMPLE_PAGE_HTML = """
 """
 
 
+# Real card markup: the ebook slug carries a percent-encoded apostrophe
+# (’ arrives as %E2%80%99) and is linked from the share buttons.
+SAMPLE_ENCODED_EBOOK_HTML = """
+<div class="news-item">
+  <div class="content-detail">
+    <h3>From SAPTADHARA to YOUTH POWER, India’s Roadmap for Viksit Bharat</h3>
+    <div class="date-size">
+      <span class="publish-time">26/08/2026</span>
+    </div>
+    <div class="share-on-sm">
+      <a href="https://www.facebook.com/sharer/sharer.php?u=https://www.mygov.in/mygov-ebook/saptadhara-youth-power-india%E2%80%99s-roadmap-viksit-bharat">Facebook</a>
+      <a href="https://twitter.com/intent/tweet?url=https://www.mygov.in/mygov-ebook/saptadhara-youth-power-india%E2%80%99s-roadmap-viksit-bharat">X</a>
+    </div>
+    <div class="group-btn-wrapper">
+      <a class="border-btn" href="https://static.mygov.in/static/resources/s3fs-public/2026-08/mygov_1787817548_7432af04.pdf">View PDF</a>
+    </div>
+  </div>
+</div>
+"""
+
+
+class TestMyGovEncodedEbookSlugs(unittest.TestCase):
+    def test_percent_encoded_slug_kept_whole(self):
+        """The ebook link must keep the full slug, not stop at the first '%'."""
+        items = mygov.parse_page(SAMPLE_ENCODED_EBOOK_HTML)
+        self.assertEqual(len(items), 1)
+        self.assertEqual(
+            items[0]["link"],
+            "https://www.mygov.in/mygov-ebook/saptadhara-youth-power-india"
+            "%E2%80%99s-roadmap-viksit-bharat",
+        )
+
+
 class TestMyGovChronologyAndGaps(unittest.TestCase):
     def test_parse_page_extracts_non_epoch_pdfs(self):
         """Ensure PDFs without mygov_<epoch> are not dropped and have proper date."""

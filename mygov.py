@@ -106,7 +106,9 @@ CARD_RE = re.compile(
 )
 PDF_RE = re.compile(r'https://static\.mygov\.in/[^"\'\s]+\.pdf', re.I)
 HEAD_RE = re.compile(r"<h[1-5][^>]*>(.*?)</h[1-5]>", re.S | re.I)
-EBOOK_RE = re.compile(r"(https://www\.mygov\.in/mygov-ebook/[a-z0-9-]+)", re.I)
+# Slugs may carry percent-encoded characters (an apostrophe arrives as
+# %E2%80%99), so match to the delimiter instead of stopping at the first '%'.
+EBOOK_RE = re.compile(r'(https://www\.mygov\.in/mygov-ebook/[^"\'\s&]+)', re.I)
 EBOOK_SHARE_RE = re.compile(
     r'sharer\.php\?u=(https%3A%2F%2Fwww\.mygov\.in%2Fmygov-ebook%2F[a-z0-9-]+|https://www\.mygov\.in/mygov-ebook/[a-z0-9-]+)',
     re.I,
