@@ -389,16 +389,30 @@ def table_html(block, refs) -> str:
     return f"<table>{caption}<tbody>{''.join(rows)}</tbody></table>"
 
 
-def chart_link_html(block) -> str:
-    """Clickable indicator for a dynamic chart too complex to render inline."""
+def chart_html(block, ref) -> str:
+    """Interactive chart: static fallback image plus a link to the live chart."""
     chart_id = block.get("id") or ""
-    if not chart_id:
-        return ""
-    href = f"https://public.flourish.studio/visualisation/{chart_id}/"
-    return (
-        f'<p class="chart-link"><a href="{esc(href)}">'
-        "Interactive chart — view</a></p>"
-    )
+    href = f"https://public.flourish.studio/visualisation/{chart_id}/" if chart_id else ""
+    image = ((ref or {}).get("fallbackImage") or {}).get("url", "")
+    if image:
+        pic = (
+            f'<img src="{esc(image)}" alt="Interactive chart" '
+            'style="max-width:100%;height:auto;" />'
+        )
+        if href:
+            pic = f'<a href="{esc(href)}">{pic}</a>'
+        caption = (
+            f'<figcaption><a href="{esc(href)}">Interactive chart — view</a></figcaption>'
+            if href
+            else ""
+        )
+        return f"<figure>{pic}{caption}</figure>"
+    if href:
+        return (
+            f'<p class="chart-link"><a href="{esc(href)}">'
+            "Interactive chart — view</a></p>"
+        )
+    return ""
 
 
 def custom_code_html(ref) -> str:
@@ -453,7 +467,9 @@ def blocks_html(nodes, refs) -> str:
             ref = refs[idx] if isinstance(idx, int) and 0 <= idx < len(refs) else {}
             out.append(custom_code_html(ref))
         elif t == "flourish":
-            out.append(chart_link_html(block))
+            idx = (block.get("data") or {}).get("referenceIndex")
+            ref = refs[idx] if isinstance(idx, int) and 0 <= idx < len(refs) else {}
+            out.append(chart_html(block, ref))
         elif t in DROP_BLOCKS or t == "break":
             continue
         elif block.get("children"):
