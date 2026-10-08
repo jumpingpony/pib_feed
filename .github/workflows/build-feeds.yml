@@ -227,13 +227,17 @@ jobs:
           TP_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
         run: python theprint.py
 
-      # Seed the FT builder from the committed local build so the runner only
-      # fetches articles published since that snapshot; the builder still
-      # merges the live published copy on top.
+      # One-time FT bootstrap seed (frozen, not refreshed). It spares the
+      # first runs from fetching the whole backlog; the builder merges the
+      # live published copy on top, and the step is skipped if it is absent.
       - name: Seed FT Opinion feed state
         run: |
-          mkdir -p public/ft-opinion
-          cp feeds/ft-opinion/feed.xml feeds/ft-opinion/cache.json public/ft-opinion/
+          if [ -d feeds/ft-opinion ]; then
+            mkdir -p public/ft-opinion
+            cp feeds/ft-opinion/feed.xml feeds/ft-opinion/cache.json public/ft-opinion/
+          else
+            echo "no feeds/ft-opinion seed; builder starts from the published copy"
+          fi
 
       - name: Build FT Opinion feed
         id: ft

@@ -853,8 +853,9 @@ live published copy on top.
 
 - The `/opinion` listing is best-effort from runners (Cloudflare 403); on those
   runs RSS-only discovery still covers the newest items.
-- Refresh the `feeds/ft-opinion/` seed by running `python ft.py` locally and
-  committing `feed.xml` + `cache.json`.
+- `feeds/ft-opinion/` is a one-time bootstrap snapshot, not a maintained copy:
+  after the first deploy the live published feed is the working state, and the
+  seed step simply skips if the directory is removed.
 - Unofficial and unaffiliated; content © Financial Times.
 
 ---
