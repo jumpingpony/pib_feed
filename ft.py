@@ -91,6 +91,7 @@ RETRIES = int(os.environ.get("FT_RETRIES", "3"))
 DELAY = float(os.environ.get("FT_DELAY", "1.0"))
 MAX_ITEMS = int(os.environ.get("FT_MAX_ITEMS", "400"))
 MAX_PAGES = int(os.environ.get("FT_MAX_PAGES", "5"))
+REPAIR_NEWEST = int(os.environ.get("FT_REPAIR_NEWEST", "0"))
 OUT_DIR = os.environ.get("FT_OUT_DIR", "public")
 PUBLISHED_BASE_URL = os.environ.get("FT_PUBLISHED_BASE_URL", "").strip().rstrip("/")
 FEED_KEY = "ft-opinion"
@@ -128,13 +129,14 @@ EX_TAGS = {
 
 # Promo boxes and embeds present in the JSON but absent from the old HTML
 # feed: the HTML sanitizer stripped matching <aside>/<iframe> blocks.
-DROP_BLOCKS = {"card", "info-box", "info-pair", "recommended", "flourish"}
+# Flourish charts are not dropped; they get a clickable indicator instead.
+DROP_BLOCKS = {"card", "info-box", "info-pair", "recommended"}
 
 # Block-level node kinds; used to tell table cells with block content apart.
 BLOCK_KINDS = {
     "paragraph", "main-image", "image-set", "image-pair", "heading",
     "blockquote", "list", "table", "thematic-break", "tweet",
-    "custom-code-component",
+    "custom-code-component", "flourish",
 }
 
 
@@ -387,6 +389,18 @@ def table_html(block, refs) -> str:
     return f"<table>{caption}<tbody>{''.join(rows)}</tbody></table>"
 
 
+def chart_link_html(block) -> str:
+    """Clickable indicator for a dynamic chart too complex to render inline."""
+    chart_id = block.get("id") or ""
+    if not chart_id:
+        return ""
+    href = f"https://public.flourish.studio/visualisation/{chart_id}/"
+    return (
+        f'<p class="chart-link"><a href="{esc(href)}">'
+        "Interactive chart — view</a></p>"
+    )
+
+
 def custom_code_html(ref) -> str:
     """Interactive chart fallback: keep its title, caption and credit."""
     attrs = (ref or {}).get("attributes") or {}
@@ -438,6 +452,8 @@ def blocks_html(nodes, refs) -> str:
             idx = (block.get("data") or {}).get("referenceIndex")
             ref = refs[idx] if isinstance(idx, int) and 0 <= idx < len(refs) else {}
             out.append(custom_code_html(ref))
+        elif t == "flourish":
+            out.append(chart_link_html(block))
         elif t in DROP_BLOCKS or t == "break":
             continue
         elif block.get("children"):
@@ -686,6 +702,25 @@ def render_item(art: dict) -> str:
     )
 
 
+def repair_newest(session: creq.Session, items: dict[str, str], count: int) -> int:
+    """Re-render the newest published items from the API (one-off backfill)."""
+    if count <= 0:
+        return 0
+    newest = sorted(items, key=lambda u: _block_date(items[u]), reverse=True)[:count]
+    repaired = 0
+    for uid in newest:
+        content = fetch_api(session, uid)
+        if not content:
+            continue
+        art = render_article(content)
+        art["uuid"] = uid
+        items[uid] = render_item(art).strip()
+        repaired += 1
+        time.sleep(DELAY)
+    print(f"  repaired {repaired}/{len(newest)} newest items")
+    return repaired
+
+
 def build_feed(items: dict[str, str]) -> str:
     ordered = [
         items[u]
@@ -756,6 +791,7 @@ def scrape(session: creq.Session, cand: dict) -> tuple[dict, dict | None]:
 def run(session: creq.Session) -> int:
     print(f"[{FEED_KEY}]")
     existing, skipped = load_state(session)
+    repair_newest(session, existing, REPAIR_NEWEST)
     rows = discover(session)
     candidates = {}
     staged = 0

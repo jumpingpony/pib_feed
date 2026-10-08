@@ -232,6 +232,9 @@ jobs:
         continue-on-error: true
         env:
           FT_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+          # One-off backfill: re-render the newest items so existing entries
+          # pick up the chart links; removed again after this build.
+          FT_REPAIR_NEWEST: "60"
         run: python ft.py
 
       - name: Mirror PDFs to the archive release
