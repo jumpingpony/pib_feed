@@ -625,11 +625,7 @@ def _block_date(block: str) -> dt.datetime:
 
 
 def load_state(session: creq.Session) -> tuple[dict[str, str], set[str]]:
-    """Item blocks keyed by UUID plus skipped (excluded) UUIDs.
-
-    The local seed and the published copy are both read, so a committed seed
-    can never hide items the live site has added since it was built.
-    """
+    """Published item blocks keyed by UUID plus skipped (excluded) UUIDs."""
     items: dict[str, str] = {}
     skipped: set[str] = set()
     local_feed = os.path.join(OUT_DIR, FEED_KEY, "feed.xml")
@@ -639,33 +635,32 @@ def load_state(session: creq.Session) -> tuple[dict[str, str], set[str]]:
             with open(local_cache, encoding="utf-8") as f:
                 data = json.load(f)
             if data.get("v") == CACHE_VERSION:
-                skipped |= set(data.get("skipped", []))
+                skipped = set(data.get("skipped", []))
         except Exception:
             pass
-    bodies = []
-    if os.path.exists(local_feed):
-        try:
-            with open(local_feed, encoding="utf-8") as f:
-                bodies.append(f.read())
-        except Exception:
-            pass
-    if PUBLISHED_BASE_URL:
+    if not skipped and PUBLISHED_BASE_URL:
         cache_body = fetch(session, f"{PUBLISHED_BASE_URL}/{FEED_KEY}/cache.json")
         if cache_body:
             try:
                 data = json.loads(cache_body)
                 if data.get("v") == CACHE_VERSION:
-                    skipped |= set(data.get("skipped", []))
+                    skipped = set(data.get("skipped", []))
             except Exception:
                 pass
-        published = fetch(session, f"{PUBLISHED_BASE_URL}/{FEED_KEY}/feed.xml")
-        if published:
-            bodies.append(published)
-    for body in bodies:
+    body = None
+    if os.path.exists(local_feed):
+        try:
+            with open(local_feed, encoding="utf-8") as f:
+                body = f.read()
+        except Exception:
+            pass
+    if not body and PUBLISHED_BASE_URL:
+        body = fetch(session, f"{PUBLISHED_BASE_URL}/{FEED_KEY}/feed.xml")
+    if body:
         for m in ITEM_RE.finditer(body):
             g = GUID_UUID_RE.search(m.group(0))
             if g:
-                items.setdefault(g.group(1), m.group(0).strip())
+                items[g.group(1)] = m.group(0).strip()
     print(f"  loaded {len(items)} published items ({len(skipped)} skipped)")
     return items, skipped
 

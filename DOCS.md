@@ -832,10 +832,6 @@ prefixes. Promo boxes and podcast blurbs are dropped; interactive charts
 degrade to their title/caption/credit. The www.ft.com article HTML remains as
 a local fallback.
 
-CI seeds the builder from the committed local build (`feeds/ft-opinion/`) so
-the runner only fetches articles published since that snapshot, then merges the
-live published copy on top.
-
 ## Configuration (env vars)
 
 | Var | Default | Meaning |
@@ -853,9 +849,6 @@ live published copy on top.
 
 - The `/opinion` listing is best-effort from runners (Cloudflare 403); on those
   runs RSS-only discovery still covers the newest items.
-- `feeds/ft-opinion/` is a one-time bootstrap snapshot, not a maintained copy:
-  after the first deploy the live published feed is the working state, and the
-  seed step simply skips if the directory is removed.
 - Unofficial and unaffiliated; content © Financial Times.
 
 ---
