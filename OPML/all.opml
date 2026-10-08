@@ -58,7 +58,7 @@
         <outline type="rss" text="Commentaries - Project Syndicate" title="Commentaries - Project Syndicate" xmlUrl="https://jumpingpony.github.io/pib_feed/project-syndicate/feed.xml" htmlUrl="https://www.project-syndicate.org/"/>
       </outline>
       <outline text="FT Opinion (unofficial, full-text)" title="FT Opinion (unofficial, full-text)">
-        <outline type="rss" text="Opinion - FT" title="Opinion - FT" xmlUrl="https://jumpingpony.github.io/pib_feed/ft-opinion/feed.xml" htmlUrl="https://www.ft.com/opinion"/>
+        <outline type="rss" text="FT - Opinion" title="FT - Opinion" xmlUrl="https://jumpingpony.github.io/pib_feed/ft-oped/feed.xml" htmlUrl="https://www.ft.com/opinion"/>
       </outline>
       <outline text="The Indian Express (unofficial, full-text)" title="The Indian Express (unofficial, full-text)">
         <outline type="rss" text="Explained - Indian Express" title="Explained - Indian Express" xmlUrl="https://jumpingpony.github.io/pib_feed/indianexpress-explained/feed.xml" htmlUrl="https://indianexpress.com/section/explained/"/>

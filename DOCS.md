@@ -802,7 +802,7 @@ included.
 
 | Feed | What | GitHub Pages |
 |------|------|------|
-| Opinion - FT | opinion columns, editorials, letters, Alphaville and newsletter columns (Life & Arts excluded) | [feed.xml](https://jumpingpony.github.io/pib_feed/ft-opinion/feed.xml) |
+| FT - Opinion | opinion columns, editorials, letters, Alphaville and newsletter columns (Life & Arts excluded) | [feed.xml](https://jumpingpony.github.io/pib_feed/ft-oped/feed.xml) |
 
 ## Why this exists
 

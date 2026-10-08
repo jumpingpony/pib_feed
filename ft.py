@@ -94,10 +94,10 @@ MAX_PAGES = int(os.environ.get("FT_MAX_PAGES", "5"))
 REPAIR_NEWEST = int(os.environ.get("FT_REPAIR_NEWEST", "0"))
 OUT_DIR = os.environ.get("FT_OUT_DIR", "public")
 PUBLISHED_BASE_URL = os.environ.get("FT_PUBLISHED_BASE_URL", "").strip().rstrip("/")
-FEED_KEY = "ft-opinion"
+FEED_KEY = "ft-oped"
 CACHE_VERSION = 2
 
-FEED_TITLE = "Opinion - FT"
+FEED_TITLE = "FT - Opinion"
 FEED_DESC = (
     "Unofficial full-text feed of FT Opinion (Life & Arts excluded), with "
     "Lex., The Big Read. and The FT View. series prefixes preserved."

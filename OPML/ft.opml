@@ -5,7 +5,7 @@
   </head>
   <body>
       <outline text="FT Opinion (unofficial, full-text)" title="FT Opinion (unofficial, full-text)">
-        <outline type="rss" text="Opinion - FT" title="Opinion - FT" xmlUrl="https://jumpingpony.github.io/pib_feed/ft-opinion/feed.xml" htmlUrl="https://www.ft.com/opinion"/>
+        <outline type="rss" text="FT - Opinion" title="FT - Opinion" xmlUrl="https://jumpingpony.github.io/pib_feed/ft-oped/feed.xml" htmlUrl="https://www.ft.com/opinion"/>
       </outline>
   </body>
 </opml>
