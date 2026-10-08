@@ -1,0 +1,24 @@
+name: Temp Probe
+
+# Reusable temporary probe for runner-side diagnosis (see the GitHub runner
+# HTTP probe heuristic in AGENTS.md). Replace the Probe step with the smallest
+# relevant requests, dispatch with `gh workflow run probe.yml`, read the logs,
+# then restore this placeholder step.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Probe
+        run: |
+          echo "edit this step for the probe you need"
+          curl -s -o /dev/null -w 'example.com: %{http_code}\n' https://example.com
