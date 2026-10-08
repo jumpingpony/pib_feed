@@ -132,6 +132,10 @@ EX_TAGS = {
 # Flourish charts are not dropped; they get a clickable indicator instead.
 DROP_BLOCKS = {"card", "info-box", "info-pair", "recommended"}
 
+# FT's image service caps at the source resolution; ask for retina size.
+IMAGE_WIDTH = 1400
+IMAGE_DPR = 2
+
 # Block-level node kinds; used to tell table cells with block content apart.
 BLOCK_KINDS = {
     "paragraph", "main-image", "image-set", "image-pair", "heading",
@@ -347,11 +351,20 @@ def inline_html(nodes) -> str:
     return "".join(out)
 
 
+def hi_res(url: str) -> str:
+    """Ask FT's image service for a retina-sized copy; other hosts pass through."""
+    if "images.ft.com/v3/image/raw/" not in url:
+        return url
+    url = re.sub(r"([?&])width=\d+", rf"\g<1>width={IMAGE_WIDTH}", url)
+    url = re.sub(r"([?&])dpr=\d+", rf"\g<1>dpr={IMAGE_DPR}", url)
+    return url
+
+
 def figure_html(ref) -> str:
     """Responsive figure from a main-image/image-set reference."""
     picture = (ref or {}).get("picture") or {}
     image = picture.get("fallbackImage") or ((picture.get("images") or [{}])[0])
-    url = image.get("url", "")
+    url = hi_res(image.get("url", ""))
     if not url:
         return ""
     out = (
@@ -393,7 +406,7 @@ def chart_html(block, ref) -> str:
     """Interactive chart: static fallback image plus a link to the live chart."""
     chart_id = block.get("id") or ""
     href = f"https://public.flourish.studio/visualisation/{chart_id}/" if chart_id else ""
-    image = ((ref or {}).get("fallbackImage") or {}).get("url", "")
+    image = hi_res(((ref or {}).get("fallbackImage") or {}).get("url", ""))
     if image:
         pic = (
             f'<img src="{esc(image)}" alt="Interactive chart" '
