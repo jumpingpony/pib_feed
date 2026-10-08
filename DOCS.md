@@ -57,7 +57,7 @@ per-item `<description>` summary, and the full body in `<content:encoded>`.
 |-----|---------|---------|
 | `PIB_YEARS` | current year … 2022 | Comma-separated years for the listing feeds |
 | `PIB_SCAN_COUNT` | `500` | Max new PRIDs walked per run for the press-releases feed |
-| `PIB_WORKERS` | `1` | Concurrent fetchers (keep at 1 to stay polite) |
+| `PIB_WORKERS` | `1` | Concurrent fetchers (CI runs 4) |
 | `PIB_PUBLISHED_BASE_URL` | – | Base URL of the live site; per-feed history is read from `<base>/<key>/feed.xml` |
 | `PIB_OUT_DIR` | `public` | Output directory |
 

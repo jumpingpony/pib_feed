@@ -73,7 +73,7 @@ jobs:
         id: pib
         continue-on-error: true
         env:
-          PIB_WORKERS: "1"
+          PIB_WORKERS: "4"
           # Merge with the already-published feeds so history is retained beyond
           # the scan window. Each feed reads <base>/<key>/feed.xml.
           PIB_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
