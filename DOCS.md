@@ -793,6 +793,72 @@ window.
 
 ---
 
+# FT Opinion feed — full-text (unofficial)
+
+A full-text RSS feed for [FT Opinion](https://www.ft.com/opinion), built by
+`ft.py`. Life & Arts content is excluded; FT's series prefixes are preserved
+(`Lex.`, `The Big Read.`, `The FT View.`) and the daily Banx cartoon is
+included.
+
+| Feed | What | GitHub Pages |
+|------|------|------|
+| Opinion - FT | opinion columns, editorials, letters, Alphaville and newsletter columns (Life & Arts excluded) | [feed.xml](https://jumpingpony.github.io/pib_feed/ft-opinion/feed.xml) |
+
+## Why this exists
+
+FT article HTML sits behind Cloudflare and a metered paywall; from GitHub
+runners the HTML path is a 403 lottery. FT's own RSS feeds are edge-cached and
+reachable, but each only exposes a 25-item window, and premium series (Big
+Read, FT View) drop out of the opinion feed.
+
+## How it works
+
+`ft.py` discovers articles from 13 edge-cached feeds (`/rss/opinion`,
+`/rss/lex`, `/rss/big-read`, `/rss/ft-view`, `/rss/letters`, `/rss/alphaville`,
+the six newsletter feeds, `/rss/banx`) plus, opportunistically, the paginated
+`/opinion` listing (pages 1-5, skipped gracefully when Cloudflare challenges the
+runner IP). Full text comes from the FT app's content API:
+
+    GET https://app-api.ft.com/__content/v6/article/<uuid>?useVanities=false
+
+an unchallenged JSON route that needs no auth, referer or TLS impersonation and
+also serves fresh articles from the origin. The JSON is rendered into item
+HTML: title (series prefix from the topper display concept or editorial desk),
+standfirst (also the description), byline (`<author>`), then body blocks —
+paragraphs, headings, blockquotes, lists, tables, links, images, tweets.
+Exclusions match FT's own listing tags and ontology annotations (Life & Arts,
+House & Home, Personal Finance, Restaurants, Wine) plus the heading brand
+prefixes. Promo boxes and podcast blurbs are dropped; interactive charts
+degrade to their title/caption/credit. The www.ft.com article HTML remains as
+a local fallback.
+
+CI seeds the builder from the committed local build (`feeds/ft-opinion/`) so
+the runner only fetches articles published since that snapshot, then merges the
+live published copy on top.
+
+## Configuration (env vars)
+
+| Var | Default | Meaning |
+|-----|---------|---------|
+| `FT_WORKERS` | `1` | Article fetch threads (keep at 1 to stay polite) |
+| `FT_DELAY` | `1.0` | Seconds between requests |
+| `FT_TIMEOUT` | `30` | HTTP timeout in seconds |
+| `FT_RETRIES` | `3` | HTTP retry attempts |
+| `FT_MAX_ITEMS` | `400` | Item cap |
+| `FT_MAX_PAGES` | `5` | Listing pages discovered per run |
+| `FT_PUBLISHED_BASE_URL` | – | Live-site base for history-merge |
+| `FT_OUT_DIR` | `public` | Output directory |
+
+## Caveats
+
+- The `/opinion` listing is best-effort from runners (Cloudflare 403); on those
+  runs RSS-only discovery still covers the newest items.
+- Refresh the `feeds/ft-opinion/` seed by running `python ft.py` locally and
+  committing `feed.xml` + `cache.json`.
+- Unofficial and unaffiliated; content © Financial Times.
+
+---
+
 # The Indian Express feeds — full-text (unofficial)
 
 Full-text RSS feeds for the section fronts of
@@ -1025,6 +1091,6 @@ issues.`) and occasionally answer with an anti-robot page.
 Ready-to-import OPML bundles live in `OPML/`: `pib.opml`, `newsonair.opml`,
 `current-affairs.opml`, `mygov.opml`, `scobserver.opml`, `prsindia.opml`,
 `idsa.opml`, `eacpm.opml`, `economist.opml`, `projectsyndicate.opml`,
-`indianexpress.opml` (includes UPSC Essentials), `indiatoday.opml`, `niti.opml`,
-`ipcs.opml`, `indiasworld.opml`, `frontline.opml`, `toi.opml`,
+`ft.opml`, `indianexpress.opml` (includes UPSC Essentials), `indiatoday.opml`,
+`niti.opml`, `ipcs.opml`, `indiasworld.opml`, `frontline.opml`, `toi.opml`,
 `theprint.opml`, and `all.opml` (every feed, grouped).

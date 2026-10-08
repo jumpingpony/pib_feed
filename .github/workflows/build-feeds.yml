@@ -27,6 +27,7 @@ on:
       - frontline.py
       - toi.py
       - theprint.py
+      - ft.py
       - archive_pdfs.py
       - .github/workflows/build-feeds.yml
 
@@ -226,6 +227,21 @@ jobs:
           TP_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
         run: python theprint.py
 
+      # Seed the FT builder from the committed local build so the runner only
+      # fetches articles published since that snapshot; the builder still
+      # merges the live published copy on top.
+      - name: Seed FT Opinion feed state
+        run: |
+          mkdir -p public/ft-opinion
+          cp feeds/ft-opinion/feed.xml feeds/ft-opinion/cache.json public/ft-opinion/
+
+      - name: Build FT Opinion feed
+        id: ft
+        continue-on-error: true
+        env:
+          FT_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+        run: python ft.py
+
       - name: Mirror PDFs to the archive release
         id: archive_pdfs
         continue-on-error: true
@@ -272,6 +288,7 @@ jobs:
             [Frontline]="${{ steps.frontline.outcome }}"
             [TimesOfIndia]="${{ steps.toi.outcome }}"
             [ThePrint]="${{ steps.theprint.outcome }}"
+            [FT]="${{ steps.ft.outcome }}"
             [ArchivePDFs]="${{ steps.archive_pdfs.outcome }}"
             [VerifyArchives]="${{ steps.verify_archives.outcome }}"
           )

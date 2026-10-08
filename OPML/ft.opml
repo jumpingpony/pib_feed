@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <head>
+    <title>FT Opinion feed (unofficial, full-text)</title>
+  </head>
+  <body>
+      <outline text="FT Opinion (unofficial, full-text)" title="FT Opinion (unofficial, full-text)">
+        <outline type="rss" text="Opinion - FT" title="Opinion - FT" xmlUrl="https://jumpingpony.github.io/pib_feed/ft-opinion/feed.xml" htmlUrl="https://www.ft.com/opinion"/>
+      </outline>
+  </body>
+</opml>
