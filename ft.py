@@ -140,7 +140,7 @@ IMAGE_DPR = 2
 BLOCK_KINDS = {
     "paragraph", "main-image", "image-set", "image-pair", "heading",
     "blockquote", "list", "table", "thematic-break", "tweet",
-    "custom-code-component", "flourish",
+    "custom-code-component", "flourish", "video",
 }
 
 
@@ -377,14 +377,14 @@ def figure_html(ref) -> str:
     return out + "</figure>"
 
 
-def table_cell(cell, refs) -> str:
+def table_cell(cell, refs, page_url: str = "") -> str:
     kids = cell.get("children") or []
     if any(k.get("type") in BLOCK_KINDS for k in kids):
-        return blocks_html(kids, refs)
+        return blocks_html(kids, refs, page_url)
     return inline_html(kids)
 
 
-def table_html(block, refs) -> str:
+def table_html(block, refs, page_url: str = "") -> str:
     caption = ""
     body = {}
     for child in block.get("children") or []:
@@ -397,7 +397,7 @@ def table_html(block, refs) -> str:
         cells = []
         for cell in row.get("children") or []:
             tag = "th" if cell.get("heading") else "td"
-            cells.append(f"<{tag}>{table_cell(cell, refs)}</{tag}>")
+            cells.append(f"<{tag}>{table_cell(cell, refs, page_url)}</{tag}>")
         rows.append(f"<tr>{''.join(cells)}</tr>")
     return f"<table>{caption}<tbody>{''.join(rows)}</tbody></table>"
 
@@ -440,7 +440,19 @@ def custom_code_html(ref) -> str:
     return f"<p>{'<br />'.join(parts)}</p>" if parts else ""
 
 
-def blocks_html(nodes, refs) -> str:
+def video_link_html(block, refs, page_url: str) -> str:
+    """Video embed: a titled link to the article page that carries it."""
+    idx = (block.get("data") or {}).get("referenceIndex")
+    ref = refs[idx] if isinstance(idx, int) and 0 <= idx < len(refs) else {}
+    href = page_url or f"https://www.ft.com/video/{ref.get('id', '')}"
+    title = ref.get("title") or "Video"
+    return (
+        f'<p class="video-link"><a href="{esc(href)}">'
+        f"{esc('Video: ' + title)}</a></p>"
+    )
+
+
+def blocks_html(nodes, refs, page_url: str = "") -> str:
     out = []
     for block in nodes or []:
         t = block.get("type")
@@ -453,22 +465,24 @@ def blocks_html(nodes, refs) -> str:
         elif t == "heading":
             out.append(f"<h2>{inline_html(block.get('children'))}</h2>")
         elif t == "blockquote":
-            out.append(f"<blockquote>{blocks_html(block.get('children'), refs)}</blockquote>")
+            out.append(f"<blockquote>{blocks_html(block.get('children'), refs, page_url)}</blockquote>")
         elif t == "list":
             items = []
             for li in block.get("children") or []:
-                inner = re.sub(r"^<p>|</p>$", "", blocks_html(li.get("children"), refs))
+                inner = re.sub(r"^<p>|</p>$", "", blocks_html(li.get("children"), refs, page_url))
                 items.append(f"<li>{inner}</li>")
             out.append(f"<ul>{''.join(items)}</ul>")
         elif t == "thematic-break":
             out.append("<hr />")
         elif t == "table":
-            out.append(table_html(block, refs))
+            out.append(table_html(block, refs, page_url))
         elif t == "image-pair":
             for child in block.get("children") or []:
                 idx = (child.get("data") or {}).get("referenceIndex")
                 if isinstance(idx, int) and 0 <= idx < len(refs):
                     out.append(figure_html(refs[idx]))
+        elif t == "video":
+            out.append(video_link_html(block, refs, page_url))
         elif t == "tweet":
             idx = (block.get("data") or {}).get("referenceIndex")
             if isinstance(idx, int) and 0 <= idx < len(refs):
@@ -486,7 +500,7 @@ def blocks_html(nodes, refs) -> str:
         elif t in DROP_BLOCKS or t == "break":
             continue
         elif block.get("children"):
-            out.append(blocks_html(block.get("children"), refs))
+            out.append(blocks_html(block.get("children"), refs, page_url))
     return "".join(out)
 
 
@@ -529,13 +543,16 @@ def render_article(content: dict) -> dict:
         head += f'<p class="standfirst"><em>{esc(standfirst)}</em></p>'
     if byline:
         head += f'<p class="byline">{esc(byline)}</p>'
+    page_url = content.get("url") or f"https://www.ft.com/content/{content.get('id', '')}"
     return {
         "title": title,
         "date": date,
         "standfirst": standfirst,
         "byline": byline,
         "labels": {a.get("prefLabel") for a in (content.get("annotations") or [])},
-        "body_html": head + blocks_html((struct.get("tree") or {}).get("children"), refs),
+        "body_html": head + blocks_html(
+            (struct.get("tree") or {}).get("children"), refs, page_url
+        ),
     }
 
 
@@ -669,10 +686,11 @@ def _block_date(block: str) -> dt.datetime:
     return dt.datetime(1970, 1, 1, tzinfo=dt.timezone.utc)
 
 
-def load_state(session: creq.Session) -> tuple[dict[str, str], set[str]]:
-    """Published item blocks keyed by UUID plus skipped (excluded) UUIDs."""
+def load_state(session: creq.Session) -> tuple[dict[str, str], set[str], set[str]]:
+    """Item blocks keyed by UUID plus skipped (excluded) and known UUIDs."""
     items: dict[str, str] = {}
     skipped: set[str] = set()
+    known: set[str] = set()
     local_feed = os.path.join(OUT_DIR, FEED_KEY, "feed.xml")
     local_cache = os.path.join(OUT_DIR, FEED_KEY, "cache.json")
     if os.path.exists(local_cache):
@@ -681,15 +699,17 @@ def load_state(session: creq.Session) -> tuple[dict[str, str], set[str]]:
                 data = json.load(f)
             if data.get("v") == CACHE_VERSION:
                 skipped = set(data.get("skipped", []))
+                known = set(data.get("known", []))
         except Exception:
             pass
-    if not skipped and PUBLISHED_BASE_URL:
+    if PUBLISHED_BASE_URL:
         cache_body = fetch(session, f"{PUBLISHED_BASE_URL}/{FEED_KEY}/cache.json")
         if cache_body:
             try:
                 data = json.loads(cache_body)
                 if data.get("v") == CACHE_VERSION:
-                    skipped = set(data.get("skipped", []))
+                    skipped |= set(data.get("skipped", []))
+                    known |= set(data.get("known", []))
             except Exception:
                 pass
     body = None
@@ -706,8 +726,8 @@ def load_state(session: creq.Session) -> tuple[dict[str, str], set[str]]:
             g = GUID_UUID_RE.search(m.group(0))
             if g:
                 items[g.group(1)] = m.group(0).strip()
-    print(f"  loaded {len(items)} published items ({len(skipped)} skipped)")
-    return items, skipped
+    print(f"  loaded {len(items)} published items ({len(skipped)} skipped, {len(known)} known)")
+    return items, skipped, known
 
 
 def render_item(art: dict) -> str:
@@ -778,7 +798,7 @@ def build_feed(items: dict[str, str]) -> str:
     )
 
 
-def write_feed(xml: str, count: int, skipped: set[str]) -> None:
+def write_feed(xml: str, count: int, skipped: set[str], known: set[str]) -> None:
     d = os.path.join(OUT_DIR, FEED_KEY)
     os.makedirs(d, exist_ok=True)
     with open(os.path.join(d, "feed.xml"), "w", encoding="utf-8") as f:
@@ -793,7 +813,14 @@ def write_feed(xml: str, count: int, skipped: set[str]) -> None:
             f"<p>{count} items. Rebuilt automatically.</p>"
         )
     with open(os.path.join(d, "cache.json"), "w", encoding="utf-8") as f:
-        json.dump({"v": CACHE_VERSION, "skipped": sorted(skipped)[:1000]}, f)
+        json.dump(
+            {
+                "v": CACHE_VERSION,
+                "skipped": sorted(skipped)[:1000],
+                "known": sorted(known)[:3000],
+            },
+            f,
+        )
 
 
 # --- main ---------------------------------------------------------------------
@@ -819,13 +846,13 @@ def scrape(session: creq.Session, cand: dict) -> tuple[dict, dict | None]:
 
 def run(session: creq.Session) -> int:
     print(f"[{FEED_KEY}]")
-    existing, skipped = load_state(session)
+    existing, skipped, known = load_state(session)
     repair_newest(session, existing, REPAIR_NEWEST)
     rows = discover(session)
     candidates = {}
     staged = 0
     for uid, row in rows.items():
-        if uid in existing or uid in skipped:
+        if uid in existing or uid in skipped or uid in known:
             continue
         if excluded_by_listing(row):
             skipped.add(uid)
@@ -850,9 +877,10 @@ def run(session: creq.Session) -> int:
                     continue
                 existing[cand["uuid"]] = render_item(art).strip()
                 found += 1
+    known |= set(existing)  # fetched once; do not refetch when trimmed by the cap
     xml = build_feed(existing)
     kept = min(len(existing), MAX_ITEMS)
-    write_feed(xml, kept, skipped)
+    write_feed(xml, kept, skipped, known)
     print(f"  {FEED_KEY}: fetched {found}, feed now {kept}")
     return kept
 
