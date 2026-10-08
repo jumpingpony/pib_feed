@@ -3,7 +3,12 @@ name: Build RSS Feeds
 on:
   schedule:
     - cron: "17 */4 * * *"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      ft_repair:
+        description: "FT: re-render this many newest items (0 = off)"
+        type: string
+        default: "0"
   push:
     branches: [main]
     paths:
@@ -232,9 +237,9 @@ jobs:
         continue-on-error: true
         env:
           FT_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
-          # One-off backfill: re-render the newest items so existing entries
-          # pick up the chart links; removed again after this build.
-          FT_REPAIR_NEWEST: "60"
+          # One-off re-render of the newest items (ft_repair dispatch input);
+          # 0 for scheduled and push runs.
+          FT_REPAIR_NEWEST: ${{ github.event.inputs.ft_repair || '0' }}
         run: python ft.py
 
       - name: Mirror PDFs to the archive release

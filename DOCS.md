@@ -840,8 +840,9 @@ a local fallback.
 | `FT_DELAY` | `1.0` | Seconds between requests |
 | `FT_TIMEOUT` | `30` | HTTP timeout in seconds |
 | `FT_RETRIES` | `3` | HTTP retry attempts |
-| `FT_MAX_ITEMS` | `400` | Item cap |
+| `FT_MAX_ITEMS` | `100` | Item cap |
 | `FT_MAX_PAGES` | `5` | Listing pages discovered per run |
+| `FT_REPAIR_NEWEST` | `0` | Re-render this many newest items (one-off backfill; CI exposes it as the `ft_repair` dispatch input) |
 | `FT_PUBLISHED_BASE_URL` | – | Live-site base for history-merge |
 | `FT_OUT_DIR` | `public` | Output directory |
 
