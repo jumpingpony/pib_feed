@@ -3,9 +3,11 @@
 
 Discovery comes from FT's own RSS feeds (opinion, lex, big-read, ft-view,
 banx), which are served from Cloudflare's edge and stay reachable from
-datacenter IPs even when the article HTML does not, plus the paginated
-/opinion listing as an opportunistic top-up for premium features the RSS
-windows drop; a challenged listing page falls back to RSS-only discovery.
+datacenter IPs even when the article HTML does not, the FT app's stream JSON
+(the Opinion firehose and the Undercover Economist column) and the paginated
+/opinion listing as an opportunistic top-up for premium features the feeds
+drop; a challenged listing page just narrows discovery to the feeds and
+streams.
 Full stories come from the FT app's content API, an unchallenged JSON route
 that needs no auth, referer or TLS impersonation and serves fresh articles
 from the origin too:
@@ -27,14 +29,11 @@ Payload mapping, verified across every entry of all three feeds:
     body         `body.structured.tree` blocks + `references` figures;
                  emphasis/strong/links/lists/headings/blockquotes kept,
                  newsletter/podcast promo boxes and embeds dropped
-    exclusions   listing tag paths and heading brand prefixes stop known
-                 lifestyle pieces before the fetch; the FT ontology
-                 annotations (Life & Arts / House & Home / Personal Finance /
-                 Restaurants / Wine) catch the rest. Banx cartoons are kept
-                 (their body is the lead figure)
+    scope        everything the opinion surfaces carry is kept, whatever its
+                 topic labels; Banx cartoons still swap in their lead figure
+                 (their body is only a link)
 
-Output: public/ft-opinion/feed.xml + index.html, merged with the published
-copy.
+Output: public/ftopeds/feed.xml + index.html, merged with the published copy.
 """
 from __future__ import annotations
 
@@ -43,6 +42,7 @@ import html
 import json
 import os
 import re
+import shutil
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -79,6 +79,14 @@ RSS_FEEDS = (
     BASE + "/rss/banx",
 )
 
+# The FT app's streams are unchallenged JSON like the content API and carry 50
+# teasers each: the Opinion firehose (vanity "comment", the same content as
+# /opinion but fresher than the 25-item RSS windows) and the Undercover
+# Economist column.
+STREAM_API = "https://app-api.ft.com/stream?uuid={uuid}&cachebuster={minute}"
+VANITY_API = "https://app-api.ft.com/vanity/{vanity}"
+STREAMS = ("comment", "734135ec-e4cb-3679-9a2f-e2385913cb8b")
+
 UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/151.0.7922.76 Safari/537.36"
@@ -94,38 +102,23 @@ MAX_PAGES = int(os.environ.get("FT_MAX_PAGES", "5"))
 REPAIR_NEWEST = int(os.environ.get("FT_REPAIR_NEWEST", "0"))
 OUT_DIR = os.environ.get("FT_OUT_DIR", "public")
 PUBLISHED_BASE_URL = os.environ.get("FT_PUBLISHED_BASE_URL", "").strip().rstrip("/")
-FEED_KEY = "ft-oped"
+FEED_KEY = "ftopeds"
+# The feed was published as ft-oped before the rename; merge its local and
+# published state once so no history is lost and nothing is refetched.
+LEGACY_FEED_KEYS = ("ft-oped",)
 CACHE_VERSION = 2
 
 FEED_TITLE = "FT - Opinion"
 FEED_DESC = (
-    "Unofficial full-text feed of FT Opinion (Life & Arts excluded), with "
-    "Lex., The Big Read. and The FT View. series prefixes preserved."
+    "Unofficial full-text feed of FT Opinion: every piece the opinion feeds, "
+    "app streams and listings carry, with Lex., The Big Read. and The FT "
+    "View. series prefixes preserved."
 )
 
 # Series headings live on the topper (Lex, The FT View) or the desk
 # (The Big Read carries a topic label instead, so the desk is the marker).
 SERIES_LABELS = {"Lex": "Lex.", "The FT View": "The FT View."}
 SERIES_DESKS = {"/FT/Lex": "Lex.", "/FT/Feats/The Big Read": "The Big Read."}
-
-# Exact heading brands and ontology labels for content we do not want.
-EX_PREFIXES = ("FT Magazine.", "Obituary.", "Lunch with the FT.", "House & Home.")
-EX_LABELS = {"Life & Arts", "House & Home", "Personal Finance", "Restaurants", "Wine"}
-
-# Exact topic paths FT tags lifestyle/culture pieces with on the listing.
-# Broad paths such as /travel-leisure or /luxury-goods are absent on purpose:
-# Lex columns carry those.
-EX_TAGS = {
-    "/life-arts",
-    "/restaurants",
-    "/wine",
-    "/personal-finance",
-    "/television",
-    "/music",
-    "/film",
-    "/sport",
-    "/style",
-}
 
 # Promo boxes and embeds present in the JSON but absent from the old HTML
 # feed: the HTML sanitizer stripped matching <aside>/<iframe> blocks.
@@ -205,7 +198,6 @@ def fetch_api(session: creq.Session, uuid: str) -> dict | None:
 
 # --- rss discovery ------------------------------------------------------------
 RSS_ITEM_RE = re.compile(r"<item>(.*?)</item>", re.S)
-RSS_TITLE_RE = re.compile(r"<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?</title>", re.S)
 RSS_LINK_RE = re.compile(r"<link>(.*?)</link>", re.S)
 RSS_DATE_RE = re.compile(r"<pubDate>(.*?)</pubDate>", re.S)
 UUID_RE = re.compile(r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})")
@@ -218,12 +210,10 @@ def parse_rss(body: str, banx: bool) -> list[dict]:
         id_m = UUID_RE.search(link_m.group(1)) if link_m else None
         if not id_m:
             continue
-        title_m = RSS_TITLE_RE.search(block)
         date_m = RSS_DATE_RE.search(block)
         rows.append(
             {
                 "uuid": id_m.group(1),
-                "rss_title": html.unescape(title_m.group(1).strip()) if title_m else "",
                 "date": date_m.group(1).strip() if date_m else "",
                 "banx": banx,
             }
@@ -231,49 +221,80 @@ def parse_rss(body: str, banx: bool) -> list[dict]:
     return rows
 
 
+# --- app streams (opinion firehose + branded columns) -------------------------
+def resolve_vanity(session: creq.Session, name: str) -> str | None:
+    """Stream UUID behind app.ft.com/stream/<name>; None when unresolved."""
+    body = fetch(session, VANITY_API.format(vanity=name), attempts=1)
+    if not body:
+        return None
+    try:
+        redirect = json.loads(body).get("redirect") or ""
+    except ValueError:
+        return None
+    m = UUID_RE.search(redirect)
+    return m.group(1) if m else None
+
+
+def discover_streams(session: creq.Session) -> list[dict]:
+    """Newest 50 articles per app stream."""
+    rows: list[dict] = []
+    minute = int(time.time() // 60)
+    for ident in STREAMS:
+        uuid = ident if UUID_RE.fullmatch(ident) else resolve_vanity(session, ident)
+        if not uuid:
+            print(f"  stream {ident}: unresolved")
+            continue
+        body = fetch(session, STREAM_API.format(uuid=uuid, minute=minute), attempts=1)
+        if not body:
+            continue
+        try:
+            teasers = json.loads(body).get("teasers") or []
+        except ValueError:
+            teasers = []
+        new = 0
+        for t in teasers:
+            uid = t.get("id") or ""
+            if t.get("type") != "article" or not UUID_RE.fullmatch(uid):
+                continue
+            rows.append(
+                {
+                    "uuid": uid,
+                    "date": t.get("firstPublishedDate") or t.get("publishedDate") or "",
+                    "banx": False,
+                }
+            )
+            new += 1
+        print(f"  stream {uuid[:8]}: {new} entries")
+        time.sleep(DELAY)
+    return rows
+
+
 # --- opinion listing (opportunistic) ------------------------------------------
 # The listing carries the full surface, including premium series the RSS
 # windows drop. It is Cloudflare-challenged from datacenter IPs, so every
-# page gets one attempt and a failure falls back to RSS-only discovery.
+# page gets one attempt and a failure falls back to feed-and-stream discovery.
 TEASER_SPLIT_RE = re.compile(r'(?=<div class="o-teaser[ "])')
-TEASER_HEAD_RE = re.compile(r'js-teaser-heading-link"[^>]*>(.*?)</a>', re.S)
-TEASER_TAG_RE = re.compile(r'o-teaser__tag[^>]*href="([^"]+)"')
 TEASER_ID_RE = re.compile(r'data-id="([^"]+)"')
 
 
-def parse_listing(page: str) -> list[dict]:
-    """Article teasers on an /opinion listing page: uuid, heading, tag."""
-    rows: list[dict] = []
+def parse_listing(page: str) -> list[str]:
+    """Article UUIDs on an /opinion listing page."""
+    uuids: list[str] = []
     for block in TEASER_SPLIT_RE.split(page):
         if not block.startswith('<div class="o-teaser') or "o-teaser--article" not in block:
             continue
         id_m = TEASER_ID_RE.search(block)
-        head_m = TEASER_HEAD_RE.search(block)
-        if not (id_m and head_m):
+        if not id_m:
             continue
         uid_m = UUID_RE.search(id_m.group(1))
-        if not uid_m:
-            continue
-        tag_m = TEASER_TAG_RE.search(block)
-        rows.append(
-            {
-                "uuid": uid_m.group(1),
-                "listing_title": strip_tags(head_m.group(1)),
-                "tag": tag_m.group(1) if tag_m else "",
-            }
-        )
-    return rows
+        if uid_m:
+            uuids.append(uid_m.group(1))
+    return uuids
 
 
-def excluded_by_listing(row: dict) -> bool:
-    """Stage-1 exclusion: heading brand or lifestyle/culture tag path."""
-    title = row.get("listing_title") or row.get("rss_title") or ""
-    tag = row.get("tag") or ""
-    return title.startswith(EX_PREFIXES) or tag in EX_TAGS or tag.startswith("/content/")
-
-
-def discover_listing(session: creq.Session) -> dict[str, dict]:
-    rows: dict[str, dict] = {}
+def discover_listing(session: creq.Session) -> list[str]:
+    uuids: list[str] = []
+    seen: set[str] = set()
     stale = 0
     for page_no in range(1, MAX_PAGES + 1):
         url = OPINION + (f"?page={page_no}" if page_no > 1 else "")
@@ -282,21 +303,22 @@ def discover_listing(session: creq.Session) -> dict[str, dict]:
             print(f"  listing page {page_no}: unreachable")
             break
         new = 0
-        for row in parse_listing(body):
-            if row["uuid"] in rows:
+        for uid in parse_listing(body):
+            if uid in seen:
                 continue
-            rows[row["uuid"]] = row
+            seen.add(uid)
+            uuids.append(uid)
             new += 1
         print(f"  listing page {page_no}: {new} new entries")
         stale = stale + 1 if new == 0 else 0
         if stale >= 2:
             break
         time.sleep(DELAY)
-    return rows
+    return uuids
 
 
 def discover(session: creq.Session) -> dict[str, dict]:
-    """All current entries keyed by UUID; RSS first, listing tops up."""
+    """All current entries keyed by UUID; RSS first, streams and listing top up."""
     rows: dict[str, dict] = {}
     for url in RSS_FEEDS:
         body = fetch(session, url)
@@ -310,14 +332,11 @@ def discover(session: creq.Session) -> dict[str, dict]:
             new += 1
         print(f"  {url.rsplit('/', 1)[-1]}: {new} new entries")
         time.sleep(DELAY)
-    for uid, row in discover_listing(session).items():
-        if uid in rows:
-            rows[uid]["tag"] = row["tag"]
-            rows[uid]["listing_title"] = row["listing_title"]
-        else:
-            row["rss_title"] = row["listing_title"]
-            row["banx"] = False
-            rows[uid] = row
+    for row in discover_streams(session):
+        rows.setdefault(row["uuid"], row)
+    for uid in discover_listing(session):
+        if uid not in rows:
+            rows[uid] = {"uuid": uid, "date": "", "banx": False}
     return rows
 
 
@@ -549,7 +568,6 @@ def render_article(content: dict) -> dict:
         "date": date,
         "standfirst": standfirst,
         "byline": byline,
-        "labels": {a.get("prefLabel") for a in (content.get("annotations") or [])},
         "body_html": head + blocks_html(
             (struct.get("tree") or {}).get("children"), refs, page_url
         ),
@@ -561,9 +579,6 @@ TAG_RE = re.compile(r"<[^>]+>")
 LD_RE = re.compile(r'<script type="application/ld\+json">(.*?)</script>', re.S)
 H1_RE = re.compile(r'<h1[^>]*class="[^>]*o-topper__headline[^>]*>(.*?)</h1>', re.S)
 BODY_RE = re.compile(r'<article[^>]*id="article-body"[^>]*>(.*?)</article>', re.S)
-ONTO_RE = re.compile(
-    r'"predicate":"http://www\.ft\.com/ontology/([^"]+)","prefLabel":"([^"]+)"'
-)
 TIME_RE = re.compile(r'datetime="([^"]+)"')
 LEAD_FIGURE_RE = re.compile(r'<figure[^>]*class="[^"]*n-content-image[^"]*".*?</figure>', re.S)
 OG_IMAGE_RE = re.compile(r'<meta property="og:image" content="([^"]+)"')
@@ -644,7 +659,6 @@ def parse_article_html(page: str, banx: bool = False) -> dict | None:
             date = dt.datetime.fromisoformat(raw.replace("Z", "+00:00"))
         except ValueError:
             date = None
-    labels = {label for _, label in ONTO_RE.findall(page)}
     body_m = BODY_RE.search(page)
     body = sanitize_body(body_m.group(1)) if body_m else ""
     if banx and "<img" not in body:
@@ -665,7 +679,6 @@ def parse_article_html(page: str, banx: bool = False) -> dict | None:
         "date": date,
         "standfirst": "",
         "byline": "",
-        "labels": labels,
         "body_html": body,
     }
 
@@ -686,33 +699,30 @@ def _block_date(block: str) -> dt.datetime:
     return dt.datetime(1970, 1, 1, tzinfo=dt.timezone.utc)
 
 
-def load_state(session: creq.Session) -> tuple[dict[str, str], set[str], set[str]]:
-    """Item blocks keyed by UUID plus skipped (excluded) and known UUIDs."""
-    items: dict[str, str] = {}
-    skipped: set[str] = set()
-    known: set[str] = set()
-    local_feed = os.path.join(OUT_DIR, FEED_KEY, "feed.xml")
-    local_cache = os.path.join(OUT_DIR, FEED_KEY, "cache.json")
+def _load_state_key(
+    session: creq.Session, key: str, items: dict[str, str], known: set[str]
+) -> None:
+    """Merge one feed key's local and published state into items/known."""
+    local_cache = os.path.join(OUT_DIR, key, "cache.json")
     if os.path.exists(local_cache):
         try:
             with open(local_cache, encoding="utf-8") as f:
                 data = json.load(f)
             if data.get("v") == CACHE_VERSION:
-                skipped = set(data.get("skipped", []))
-                known = set(data.get("known", []))
+                known.update(data.get("known", []))
         except Exception:
             pass
     if PUBLISHED_BASE_URL:
-        cache_body = fetch(session, f"{PUBLISHED_BASE_URL}/{FEED_KEY}/cache.json")
+        cache_body = fetch(session, f"{PUBLISHED_BASE_URL}/{key}/cache.json")
         if cache_body:
             try:
                 data = json.loads(cache_body)
                 if data.get("v") == CACHE_VERSION:
-                    skipped |= set(data.get("skipped", []))
-                    known |= set(data.get("known", []))
+                    known.update(data.get("known", []))
             except Exception:
                 pass
     body = None
+    local_feed = os.path.join(OUT_DIR, key, "feed.xml")
     if os.path.exists(local_feed):
         try:
             with open(local_feed, encoding="utf-8") as f:
@@ -720,14 +730,22 @@ def load_state(session: creq.Session) -> tuple[dict[str, str], set[str], set[str
         except Exception:
             pass
     if not body and PUBLISHED_BASE_URL:
-        body = fetch(session, f"{PUBLISHED_BASE_URL}/{FEED_KEY}/feed.xml")
+        body = fetch(session, f"{PUBLISHED_BASE_URL}/{key}/feed.xml")
     if body:
         for m in ITEM_RE.finditer(body):
             g = GUID_UUID_RE.search(m.group(0))
             if g:
-                items[g.group(1)] = m.group(0).strip()
-    print(f"  loaded {len(items)} published items ({len(skipped)} skipped, {len(known)} known)")
-    return items, skipped, known
+                items.setdefault(g.group(1), m.group(0).strip())
+
+
+def load_state(session: creq.Session) -> tuple[dict[str, str], set[str]]:
+    """Item blocks keyed by UUID plus known UUIDs; legacy keys merge in."""
+    items: dict[str, str] = {}
+    known: set[str] = set()
+    for key in (FEED_KEY, *LEGACY_FEED_KEYS):
+        _load_state_key(session, key, items, known)
+    print(f"  loaded {len(items)} published items ({len(known)} known)")
+    return items, known
 
 
 def render_item(art: dict) -> str:
@@ -798,7 +816,7 @@ def build_feed(items: dict[str, str]) -> str:
     )
 
 
-def write_feed(xml: str, count: int, skipped: set[str], known: set[str]) -> None:
+def write_feed(xml: str, count: int, known: set[str]) -> None:
     d = os.path.join(OUT_DIR, FEED_KEY)
     os.makedirs(d, exist_ok=True)
     with open(os.path.join(d, "feed.xml"), "w", encoding="utf-8") as f:
@@ -816,14 +834,34 @@ def write_feed(xml: str, count: int, skipped: set[str], known: set[str]) -> None
         json.dump(
             {
                 "v": CACHE_VERSION,
-                "skipped": sorted(skipped)[:1000],
                 "known": sorted(known)[:3000],
             },
             f,
         )
 
 
+def scrub_legacy_dirs(out_dir: str) -> None:
+    """Remove legacy published directories to prevent stale Pages artifacts."""
+    for legacy_key in LEGACY_FEED_KEYS:
+        d = os.path.join(out_dir, legacy_key)
+        if os.path.exists(d):
+            shutil.rmtree(d, ignore_errors=True)
+            print(f"  scrubbed legacy directory {d}")
+
+
 # --- main ---------------------------------------------------------------------
+def item_date(raw: str) -> dt.datetime | None:
+    """RSS dates are RFC 822, app stream dates ISO 8601."""
+    try:
+        return parsedate_to_datetime(raw)
+    except (TypeError, ValueError):
+        pass
+    try:
+        return dt.datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
 def scrape(session: creq.Session, cand: dict) -> tuple[dict, dict | None]:
     """One article: app API first, www HTML fallback. Fails -> retried next run."""
     content = fetch_api(session, cand["uuid"])
@@ -837,29 +875,21 @@ def scrape(session: creq.Session, cand: dict) -> tuple[dict, dict | None]:
         return cand, None
     art["uuid"] = cand["uuid"]
     if not art["date"] and cand["date"]:
-        try:
-            art["date"] = parsedate_to_datetime(cand["date"])
-        except (TypeError, ValueError):
-            pass
+        art["date"] = item_date(cand["date"])
     return cand, art
 
 
 def run(session: creq.Session) -> int:
     print(f"[{FEED_KEY}]")
-    existing, skipped, known = load_state(session)
+    existing, known = load_state(session)
     repair_newest(session, existing, REPAIR_NEWEST)
     rows = discover(session)
     candidates = {}
-    staged = 0
     for uid, row in rows.items():
-        if uid in existing or uid in skipped or uid in known:
-            continue
-        if excluded_by_listing(row):
-            skipped.add(uid)
-            staged += 1
+        if uid in existing or uid in known:
             continue
         candidates[uid] = row
-    print(f"  {len(candidates)} new candidates to scrape ({staged} pre-excluded)")
+    print(f"  {len(candidates)} new candidates to scrape")
     found = 0
     if candidates:
         with ThreadPoolExecutor(max_workers=WORKERS) as ex:
@@ -868,19 +898,13 @@ def run(session: creq.Session) -> int:
                 cand, art = fut.result()
                 if not art:
                     continue  # transient; retried next run
-                if (
-                    art["labels"] & EX_LABELS
-                    or art["title"].startswith(EX_PREFIXES)
-                    or cand["rss_title"].startswith(EX_PREFIXES)
-                ):
-                    skipped.add(cand["uuid"])
-                    continue
                 existing[cand["uuid"]] = render_item(art).strip()
                 found += 1
     known |= set(existing)  # fetched once; do not refetch when trimmed by the cap
     xml = build_feed(existing)
     kept = min(len(existing), MAX_ITEMS)
-    write_feed(xml, kept, skipped, known)
+    write_feed(xml, kept, known)
+    scrub_legacy_dirs(OUT_DIR)
     print(f"  {FEED_KEY}: fetched {found}, feed now {kept}")
     return kept
 

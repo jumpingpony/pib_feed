@@ -796,13 +796,14 @@ window.
 # FT Opinion feed — full-text (unofficial)
 
 A full-text RSS feed for [FT Opinion](https://www.ft.com/opinion), built by
-`ft.py`. Life & Arts content is excluded; FT's series prefixes are preserved
+`ft.py`. Every piece the opinion feeds, app streams and listing carry is
+included, without topic exclusions; FT's series prefixes are preserved
 (`Lex.`, `The Big Read.`, `The FT View.`) and the daily Banx cartoon is
 included.
 
 | Feed | What | GitHub Pages |
 |------|------|------|
-| FT - Opinion | opinion columns, editorials, letters, Alphaville and newsletter columns (Life & Arts excluded) | [feed.xml](https://jumpingpony.github.io/pib_feed/ft-oped/feed.xml) |
+| FT - Opinion | everything under FT Opinion — op-eds, editorials, letters, Alphaville, newsletter and lifestyle columns, no topic exclusions | [feed.xml](https://jumpingpony.github.io/pib_feed/ftopeds/feed.xml) |
 
 ## Why this exists
 
@@ -815,9 +816,11 @@ Read, FT View) drop out of the opinion feed.
 
 `ft.py` discovers articles from 13 edge-cached feeds (`/rss/opinion`,
 `/rss/lex`, `/rss/big-read`, `/rss/ft-view`, `/rss/letters`, `/rss/alphaville`,
-the six newsletter feeds, `/rss/banx`) plus, opportunistically, the paginated
-`/opinion` listing (pages 1-5, skipped gracefully when Cloudflare challenges the
-runner IP). Full text comes from the FT app's content API:
+the six newsletter feeds, `/rss/banx`), the FT app's stream JSON (the Opinion
+firehose and the Undercover Economist column, 50 items each) plus,
+opportunistically, the paginated `/opinion` listing (pages 1-5, skipped
+gracefully when Cloudflare challenges the runner IP). Full text comes from the
+FT app's content API:
 
     GET https://app-api.ft.com/__content/v6/article/<uuid>?useVanities=false
 
@@ -826,11 +829,10 @@ also serves fresh articles from the origin. The JSON is rendered into item
 HTML: title (series prefix from the topper display concept or editorial desk),
 standfirst (also the description), byline (`<author>`), then body blocks —
 paragraphs, headings, blockquotes, lists, tables, links, images, tweets.
-Exclusions match FT's own listing tags and ontology annotations (Life & Arts,
-House & Home, Personal Finance, Restaurants, Wine) plus the heading brand
-prefixes. Promo boxes and podcast blurbs are dropped; interactive charts
-degrade to their title/caption/credit. The www.ft.com article HTML remains as
-a local fallback.
+There are no topic exclusions: everything the opinion surfaces carry, from
+op-eds to Weekend columns, is kept. Promo boxes and podcast blurbs are
+dropped; interactive charts degrade to their title/caption/credit. The
+www.ft.com article HTML remains as a local fallback.
 
 ## Configuration (env vars)
 

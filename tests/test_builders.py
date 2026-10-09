@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import economist
+import ft
 import ie_epaper
 import meca
 import mygov
@@ -742,6 +743,18 @@ class TestToiBuilder(unittest.TestCase):
             content = f.read()
 
         self.assertNotIn("toi-swaminomics", content)
+
+
+class TestFtBuilder(unittest.TestCase):
+    """FT Opinion: renamed key with one-time legacy merge, no exclusions."""
+
+    def test_ft_feed_key(self):
+        self.assertEqual(ft.FEED_KEY, "ftopeds")
+        self.assertEqual(ft.LEGACY_FEED_KEYS, ("ft-oped",))
+
+    def test_ft_no_exclusion_rules(self):
+        for name in ("EX_LABELS", "EX_TAGS", "EX_PREFIXES", "excluded_by_listing"):
+            self.assertFalse(hasattr(ft, name))
 
 
 if __name__ == "__main__":
