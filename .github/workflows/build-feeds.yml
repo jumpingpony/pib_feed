@@ -285,6 +285,26 @@ jobs:
         if: ${{ github.event.inputs.pubdate_stagger == '1' }}
         run: python stagger_pubdates.py
 
+      # 2026-10-13 renamed these paths from hyphens to underscores; keep serving
+      # the old paths so readers still polling them (or importing the old OPML)
+      # recover instead of hitting 404s.
+      - name: Copy legacy NITI/Vision feed paths
+        run: |
+          set -eu
+          while IFS=: read -r old new; do
+            mkdir -p "public/$old"
+            cp "public/$new/feed.xml" "public/$old/feed.xml"
+            cp "public/$new/index.html" "public/$old/index.html"
+          done <<'EOF'
+          niti-reports:niti_reports
+          niti-working-papers:niti_working-papers
+          niti-research-papers:niti_research-papers
+          niti-policy-papers:niti_policy-papers
+          niti-annual-reports:niti_annual-reports
+          visionias-pt-365:visionias_pt-365
+          visionias-mains-365:visionias_mains-365
+          EOF
+
       # Publish whatever built (this runs before the gate so a failed feed never
       # blocks deploying the healthy ones), then fail the run if any step failed.
       - name: Upload Pages artifact
