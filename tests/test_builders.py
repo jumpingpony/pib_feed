@@ -104,6 +104,18 @@ class TestBuildersUrlTemplating(unittest.TestCase):
             "https://github.com/jumpingpony/pib_feed/releases/download/indianexpress-delhi/indianexpress-delhi_2026-06-15.pdf",
         )
 
+    def test_ie_epaper_archive_tags(self):
+        ie_epaper.ARCHIVE_BASE_URL = "https://github.com/jumpingpony/pib_feed/releases/download/{feed}-{year}"
+
+        year = dt.datetime.now(IST).year
+        tags = ie_epaper.archive_tags_to_check()
+
+        # The Delhi release is rolling (unpartitioned), unlike the rest.
+        self.assertIn("indianexpress-delhi", tags)
+        self.assertNotIn(f"indianexpress-delhi-{year}", tags)
+        self.assertIn(f"upsc-essentials-{year}", tags)
+        self.assertIn(f"upsc-essentials-{year - 1}", tags)
+
     def test_visionias_templating(self):
         visioniaspt365.ARCHIVE_MODE = "archive"
         visioniaspt365.ARCHIVE_BASE_URL = "https://github.com/jumpingpony/pib_feed/releases/download/{feed}-{year}"

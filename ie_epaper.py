@@ -12,7 +12,7 @@ a `type` (`magazine` or `newspaper`):
   download/fullpdflink/<type>/<titleId>/<issueId>
         -> {"status":true,"data":{"fullpdf": <signed url>, ...}}. The signed URL
         points at dcache/pcache.epapr.in (Google Cloud Storage) with an
-        `Expires=` about a month out; its Content-Disposition is the real
+        `Expires=` only ~5 minutes out; its Content-Disposition is the real
         filename. A *wrong* titleId (or wrong type) returns
         `status:false "Download not available"`, so both are required.
 
@@ -117,7 +117,7 @@ def fetch_json(session: requests.Session, url: str):
 
 # --- source -------------------------------------------------------------------
 def signed_pdf_url(session: requests.Session, feed: dict, issue_id: int) -> str | None:
-    """Resolve the (signed, ~1-month) direct PDF URL for one issue."""
+    """Resolve the (signed, ~5-minute) direct PDF URL for one issue."""
     j = fetch_json(session, f"{BASE}/download/fullpdflink/{feed['type']}/{feed['title_id']}/{issue_id}")
     if not isinstance(j, dict) or not j.get("status"):
         err = j.get("error") if isinstance(j, dict) else "no response"
@@ -125,6 +125,20 @@ def signed_pdf_url(session: requests.Session, feed: dict, issue_id: int) -> str 
         return None
     url = (j.get("data") or {}).get("fullpdf")
     return url.strip() if url else None
+
+
+def archive_tags_to_check() -> set[str]:
+    """Release tags the asset inventory should list."""
+    this_year = dt.datetime.now(IST).year
+    tags = {"pdf-archive"}
+    for feed in FEEDS:
+        for year in (this_year, this_year - 1):
+            # Same derivation as uploads, so a rolling (unpartitioned) release
+            # is checked under its real tag, not a nonexistent {feed}-{year}.
+            tag = archive_tag_for(feed, {"date": dt.datetime(year, 1, 1, tzinfo=IST)})
+            if tag:
+                tags.add(tag)
+    return tags
 
 
 def load_archive_assets(tags: list[str] | None = None) -> set[str] | None:
@@ -138,19 +152,7 @@ def load_archive_assets(tags: list[str] | None = None) -> set[str] | None:
     repo = repo_match.group(1)
 
     if tags is None:
-        this_year = dt.datetime.now(IST).year
-        years = [this_year, this_year - 1]
-        tags_to_check = {"pdf-archive"}
-        for f in FEEDS:
-            for y in years:
-                base = ARCHIVE_BASE_URL
-                if "{feed}" in base:
-                    base = base.format(feed=f["key"], year=y)
-                elif "{year}" in base:
-                    base = base.format(year=y)
-                tag = base.rsplit("/", 1)[-1]
-                if tag:
-                    tags_to_check.add(tag)
+        tags_to_check = archive_tags_to_check()
     else:
         tags_to_check = set(tags)
 
