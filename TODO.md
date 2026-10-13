@@ -1,9 +1,9 @@
 # Tasks & Roadmap
 
-1. **Switch Remaining Static Sources to Direct Links (Free ~4.7 GB Release Space)**:
-   - **NITI Aayog** (`niti.py`): Set `NITI_ARCHIVE_MODE: link` in CI; delete `niti-2019`…`niti-2026` releases (~1.38 GB).
-   - **NextIAS Magazine** (`meca.py`): Set `MECA_ARCHIVE_MODE: link` in CI; delete `nextias-magazine-2024`…`2026` releases (~1.56 GB).
-   - **Vision IAS** (`visioniaspt365.py`): Set `VIS_ARCHIVE_MODE: link` in CI; delete `visionias-pt365-*` and `visionias-mains365-*` releases (~1.78 GB).
+1. **Switch Remaining Static Sources to Direct Links**:
+   - **NITI Aayog** (`niti.py`) and **Vision IAS** (`visioniaspt365.py`): done — CI runs `*_ARCHIVE_MODE: link`, items hotlink the source PDFs, feed keys renamed (`niti_*`, `visionias_*`), releases removed (3.18 GiB freed, 2026-10-13).
+   - **NextIAS Magazine** (`meca.py`): Set `MECA_ARCHIVE_MODE: link` in CI; delete `nextias-magazine-2024`…`2026` (~1.62 GiB). Needs a per-feed mode override because `MECA_ARCHIVE_MODE` also controls Made Easy.
+   - **Made Easy** (`meca.py`): Same override; `madeeasy-weekly-2024`…`2026` (~0.33 GiB) optional.
 
 2. **Automated User-Agent Modernization**:
    - Implement an automated mechanism to dynamically resolve or periodically update the standard browser User-Agent string to the latest stable Chrome release.
