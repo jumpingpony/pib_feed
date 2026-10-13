@@ -143,13 +143,13 @@ The GitHub Actions workflow rebuilds the consolidated podcast feed and deploys t
 
 RSS feeds for coaching current-affairs compilations that publish **only PDFs**
 and no RSS. Built by `visioniaspt365.py` (Vision IAS) and `meca.py` (Made Easy +
-NextIAS). Each item's body links the PDF; recent years' PDFs are also **archived**
-(see below).
+NextIAS). Each item's body links the source PDF directly; Vision IAS items are
+hotlinked, while Made Easy / NextIAS are still mirrored (see below).
 
 | Feed | What | GitHub Pages |
 |------|------|------|
-| Vision IAS PT 365 | PT 365 PDFs, item titles `[YEAR \| title]`, newest year first | [feed.xml](https://jumpingpony.github.io/pib_feed/visionias-pt-365/feed.xml) |
-| Vision IAS Mains 365 | Mains 365 PDFs, item titles `[YEAR \| title]`, newest year first | [feed.xml](https://jumpingpony.github.io/pib_feed/visionias-mains-365/feed.xml) |
+| Vision IAS PT 365 | PT 365 PDFs, item titles `Title (Year)`, newest year first | [feed.xml](https://jumpingpony.github.io/pib_feed/visionias_pt-365/feed.xml) |
+| Vision IAS Mains 365 | Mains 365 PDFs, item titles `Title (Year)`, newest year first | [feed.xml](https://jumpingpony.github.io/pib_feed/visionias_mains-365/feed.xml) |
 | Made Easy Weekly CA | weekly current-affairs PDFs | [feed.xml](https://jumpingpony.github.io/pib_feed/madeeasy-weekly/feed.xml) |
 | NextIAS Monthly CA | monthly current-affairs magazine PDFs | [feed.xml](https://jumpingpony.github.io/pib_feed/nextias-magazine/feed.xml) |
 
@@ -161,7 +161,8 @@ NextIAS). Each item's body links the PDF; recent years' PDFs are also **archived
   URL even anonymously. The listing bunches documents under bare year headers
   (`2026`, `2025`, …); the script reads that grouping to assign each document its
   authoritative year, selects the ones from `ARCHIVE_MIN_YEAR` onward, and emits
-  one item per document titled `[YEAR | title]`, ordered newest year first then
+  one item per document titled `Title (Year)` (no bracket wrapper; the year is
+  omitted when the title already carries it), ordered newest year first then
   newest document first.
 - **Made Easy** (`meca.py`) — the download form's `ft` filename is served
   directly from `/uploads/Files/<ft>` (no captcha/lead needed), so items link
@@ -185,19 +186,19 @@ version forever. Instead they are mirrored as **GitHub Release assets** (up to
 
 To keep asset counts per release safely below GitHub's limits (~1,000 items per release),
 releases are partitioned cleanly:
-- **MyGov publications**: Merged per year under `mygov-{year}` (e.g. `mygov-2024`, `mygov-2025`, `mygov-2026`).
-- **NITI Aayog publications**: Merged per year under `niti-{year}` (e.g. `niti-2023`, `niti-2024`, `niti-2025`, `niti-2026`).
-- **Newspapers / E-papers**: Partitioned per-feed per-year under `indianexpress-delhi-{year}` and `upsc-essentials-{year}`.
-- **Vision IAS**: Partitioned per-feed per-year under `visionias-pt365-{year}` and `visionias-mains365-{year}`.
+- **MyGov publications**: Per year under `mygov-{year}` when archival is enabled; CI runs `MYGOV_ARCHIVE_MODE=link`, and four 2024 Mann Ki Baat items still point at the removed `mygov-2024` release (allowlisted in `.github/known-missing-assets.json`).
+- **NITI Aayog publications**: hotlinked to niti.gov.in PDFs (`NITI_ARCHIVE_MODE=link`); the `niti-{year}` releases were removed.
+- **Newspapers / E-papers**: `indianexpress-delhi` (one rolling, unpartitioned release) and `upsc-essentials-{year}`.
+- **Vision IAS**: hotlinked to CloudFront PDFs (`VIS_ARCHIVE_MODE=link`); the `visionias-pt365-{year}` and `visionias-mains365-{year}` releases were removed.
 - **Made Easy & NextIAS**: Partitioned per-feed per-year under `madeeasy-weekly-{year}` and `nextias-magazine-{year}`.
-- **Legacy Releases**: `pdf-archive` and `image-archive` remain permanently on GitHub with all original assets intact, guaranteeing that legacy direct links never 404 or break.
+- **Legacy Releases**: the original `pdf-archive` and `image-archive` releases were migrated into the partitioned releases above and later removed; no published feed references them.
 
-1. In archive mode (`*_ARCHIVE_MODE=archive`), feed scripts write `archive/<key>.json` manifests of `{name, url, tag}` and point feed items at the release URL.
+1. In archive mode (`*_ARCHIVE_MODE=archive`), feed scripts write `archive/<key>.json` manifests of `{name, url, tag}` and point feed items at the release URL; in link mode items link the source PDF directly.
 2. `archive_pdfs.py` reads the manifests, groups uploads by target `tag`, ensures each release exists, and uploads only missing assets.
-3. `archive_pdfs.py --verify` performs the global reference verification check across all `/releases/download/<tag>/<filename>` links in published feeds against GitHub release inventories.
+3. `archive_pdfs.py --verify` performs the global reference verification check across all `/releases/download/<tag>/<filename>` links in published feeds against GitHub release inventories. `ARCHIVE_VERIFY_DAYS` bounds it to recent items; `0` audits every published item (what CI runs).
 
-Only PDFs published in **`ARCHIVE_MIN_YEAR` or later** are fed and archived, which
-bounds the archive; future years are included automatically. The in-code default
+Only PDFs published in **`ARCHIVE_MIN_YEAR` or later** are fed, which
+bounds the feeds; future years are included automatically. The in-code default
 is **2025 for Vision IAS** and **2024 for Made Easy / NextIAS**.
 
 ## Configuration (env vars)
@@ -210,13 +211,16 @@ is **2025 for Vision IAS** and **2024 for Made Easy / NextIAS**.
 | `MYGOV_ARCHIVE_BASE_URL` | – | Release download base with `{year}`, e.g. `https://github.com/<owner>/<repo>/releases/download/mygov-{year}` |
 | `NITI_ARCHIVE_BASE_URL` | – | Release download base with `{year}`, e.g. `https://github.com/<owner>/<repo>/releases/download/niti-{year}` |
 | `IE_EPAPER_ARCHIVE_BASE_URL` | – | Release download base with `{feed}` and `{year}`, e.g. `https://github.com/<owner>/<repo>/releases/download/{feed}-{year}` |
+| `IE_EPAPER_DELHI_WINDOW_DAYS` | `183` | Rolling collection window (~6 months) for the Delhi daily; older issues stop being collected/repaired but stay in the published feed |
 | `ECON_ARCHIVE_BASE_URL` | – | Release download base with `{year}`, e.g. `https://github.com/<owner>/<repo>/releases/download/economist-images-{year}` |
 | `VIS_PUBLISHED_BASE_URL` / `MECA_PUBLISHED_BASE_URL` | – | Live-site base for history-merge |
 | `VIS_MAX_FETCH` | `80` | Vision document window per feed |
+| `NITI_REBUILD` / `VIS_REBUILD` | `0` | One-off rebuild (`1`): re-render every in-range item, e.g. after an archive→link switch; wired to the `niti_rebuild` / `vis_rebuild` dispatch inputs |
 | `ARCHIVE_MANIFEST_DIR` | `archive` | Where the manifests are written |
 | `ARCHIVE_RELEASE_TAG` | `pdf-archive` | Default release tag if unannotated |
 | `ARCHIVE_REFERENCE_DIR` | `public` | Generated feeds whose archive links are checked against release assets |
-| `ARCHIVE_VERIFY_DAYS` | `1` | Number of recent publication days whose feed archive links are verified |
+| `ARCHIVE_VERIFY_DAYS` | `1` | Recent publication days whose feed archive links are verified; `0` = every published item (CI runs the full audit) |
+| `ARCHIVE_VERIFY_ALLOWLIST` | – | JSON of `{tag: [filename]}` references accepted as known-missing; CI passes `.github/known-missing-assets.json` |
 | `ARCHIVE_VERIFY_ONLY` | – | Set to `true`/`1` to run reference verification instead of uploading |
 
 ## Local run
@@ -492,8 +496,8 @@ two free titles; add rows to its `FEEDS` list for more.
 
 | Feed | Content | Link |
 | --- | --- | --- |
-| UPSC Essentials | full magazine PDFs, Jan 2026 on | [feed.xml](https://jumpingpony.github.io/pib_feed/upsc-essentials/feed.xml) |
-| Delhi Edition | daily newspaper PDFs, Jun 2026 on | [feed.xml](https://jumpingpony.github.io/pib_feed/indianexpress-delhi/feed.xml) |
+| UPSC Essentials | full magazine PDFs, May 2025 on | [feed.xml](https://jumpingpony.github.io/pib_feed/upsc-essentials/feed.xml) |
+| Delhi Edition | daily newspaper PDFs, Aug 2026 on, rolling ~6-month window | [feed.xml](https://jumpingpony.github.io/pib_feed/indianexpress-delhi/feed.xml) |
 
 ## How it works
 
@@ -509,15 +513,17 @@ keyed by a per-title id and a `type` (`magazine` or `newspaper`):
   titleId or wrong type returns `status:false`**, so both are required. Note
   UPSC Essentials is `type=magazine`, the daily editions are `type=newspaper`.
 
-That PDF URL is signed with an `Expires=` about a month out, so it is not durable
+That PDF URL is signed with an `Expires=` only ~5 minutes out, so it is not durable
 enough for a feed. As with the Vision IAS / NextIAS feeds, each in-range issue's
-PDF is mirrored to the `pdf-archive` GitHub Release by `archive_pdfs.py` and the
-item body links that durable asset (`<key>_<YYYY-MM-DD>.pdf`). The manifest's
-signed source URL only has to stay valid for the few minutes until
-`archive_pdfs.py` runs in the same CI job. To keep a daily's API load bounded, a
-signed URL is minted only for new issues and published issues whose release
-asset is missing. The release inventory is read once with `gh`; CI supplies its
-`GITHUB_TOKEN`, while local archive-mode runs use the active `gh` authentication.
+PDF is mirrored to a per-feed release (`indianexpress-delhi`, `upsc-essentials-{year}`)
+by `archive_pdfs.py` and the item body links that durable asset
+(`<key>_<YYYY-MM-DD>.pdf`). The manifest's signed source URL only has to stay
+valid for the few minutes until `archive_pdfs.py` runs in the same CI job, so the
+workflow builds this feed immediately before the mirror step. To keep a daily's
+API load bounded, a signed URL is minted only for new issues and published issues
+whose release asset is missing. The release inventory is read once with `gh`; CI
+supplies its `GITHUB_TOKEN`, while local archive-mode runs use the active `gh`
+authentication.
 
 ## Configuration (env vars)
 
@@ -525,14 +531,19 @@ asset is missing. The release inventory is read once with `gh`; CI supplies its
 | --- | --- | --- |
 | `IE_EPAPER_ARCHIVE_MODE` | `link` | `link` (item → reader page) or `archive` (item → release asset + write manifest) |
 | `IE_EPAPER_ARCHIVE_BASE_URL` | – | Release download base with `{feed}` and `{year}`, e.g. `https://github.com/<owner>/<repo>/releases/download/{feed}-{year}` |
+| `IE_EPAPER_DELHI_WINDOW_DAYS` | `183` | Rolling collection window (~6 months) for the Delhi daily; older issues are no longer collected or repaired, but remain in the published feed |
 | `IE_EPAPER_PUBLISHED_BASE_URL` | – | Live-site base for history-merge |
-| `ARCHIVE_MIN_DATE` | `2026-01-01` | Fallback earliest issue date; per-feed `min_date` in `FEEDS` overrides (UPSC Jan 2026, Delhi/EYE Jun 2026) |
+| `ARCHIVE_MIN_DATE` | `2026-01-01` | Fallback earliest issue date; per-feed `min_date` in `FEEDS` overrides (UPSC May 2025, Delhi Aug 2026 + rolling window) |
 
 ## Caveats
 
 - A magazine's `volumedates_v3` may return only the latest ~50 issues; older ones
   fall out of the source but are retained via the published-feed history-merge.
-- Daily editions accumulate fast (~9 MB/issue); `min_date` bounds the archive.
+- Daily editions accumulate fast (~9 MB/issue); `min_date` plus the rolling
+  `window_days` bound collection and repair, and the feed keeps the newest 180
+  issues (~6 months). Once issues fall out of the feed their assets become
+  unreferenced and can be removed with `scripts/prune_unreferenced_assets.py`,
+  keeping the release at roughly a 6-month window.
 - Depends on the free-access flags and the ReadWhere API shape; if IE walls a
   title or changes the endpoints, that feed breaks.
 - Unofficial and unaffiliated; content © The Indian Express.
@@ -656,17 +667,17 @@ articles not already in the published feed are fetched, so steady state is light
 `niti.py` builds **PDF feeds** of NITI Aayog's publications (`niti.gov.in`). NITI
 hosts no article bodies of its own — the "news" in its official `rss.xml` is
 press-release stubs that redirect to PIB (already covered by `pib_feed.py`), so its
-only NITI-hosted content is the report PDFs. Each in-range PDF is mirrored to the
-`pdf-archive` GitHub Release by `archive_pdfs.py`, and the item links that durable
-asset (falling back to the source PDF when archival is off).
+only NITI-hosted content is the report PDFs. Items link the niti.gov.in PDF
+directly; the former `niti-{year}` release mirroring was dropped in favour of
+hotlinks (the releases were removed).
 
 | Feed | Content | Link |
 | --- | --- | --- |
-| Division Reports - NITI Aayog | division/policy reports, tagged by division | [feed.xml](https://jumpingpony.github.io/pib_feed/niti-reports/feed.xml) |
-| Working Papers - NITI Aayog | working papers | [feed.xml](https://jumpingpony.github.io/pib_feed/niti-working-papers/feed.xml) |
-| Research Papers - NITI Aayog | research papers (with author) | [feed.xml](https://jumpingpony.github.io/pib_feed/niti-research-papers/feed.xml) |
-| Policy Papers - NITI Aayog | policy papers (with author) | [feed.xml](https://jumpingpony.github.io/pib_feed/niti-policy-papers/feed.xml) |
-| Annual Reports - NITI Aayog | annual reports (English + Hindi) | [feed.xml](https://jumpingpony.github.io/pib_feed/niti-annual-reports/feed.xml) |
+| Division Reports - NITI Aayog | division/policy reports, tagged by division | [feed.xml](https://jumpingpony.github.io/pib_feed/niti_reports/feed.xml) |
+| Working Papers - NITI Aayog | working papers | [feed.xml](https://jumpingpony.github.io/pib_feed/niti_working-papers/feed.xml) |
+| Research Papers - NITI Aayog | research papers (with author) | [feed.xml](https://jumpingpony.github.io/pib_feed/niti_research-papers/feed.xml) |
+| Policy Papers - NITI Aayog | policy papers (with author) | [feed.xml](https://jumpingpony.github.io/pib_feed/niti_policy-papers/feed.xml) |
+| Annual Reports - NITI Aayog | annual reports (English + Hindi) | [feed.xml](https://jumpingpony.github.io/pib_feed/niti_annual-reports/feed.xml) |
 
 ## How it works
 
@@ -686,8 +697,9 @@ Item identity (and dedup vs. the published feed) is the stable
 | Var | Default | Meaning |
 | --- | --- | --- |
 | `NITI_PUBLISHED_BASE_URL` | – | Live-site base for history-merge |
-| `NITI_ARCHIVE_MODE` | `link` | `archive` mirrors PDFs to the release and links the asset |
+| `NITI_ARCHIVE_MODE` | `link` | `archive` mirrors PDFs to the release and links the asset; CI keeps `link` (hotlinks niti.gov.in) |
 | `NITI_ARCHIVE_BASE_URL` | – | Release download base with `{year}`, e.g. `https://github.com/<owner>/<repo>/releases/download/niti-{year}` |
+| `NITI_REBUILD` | `0` | One-off rebuild (`1`): re-render every in-range item (see the `niti_rebuild` dispatch input) |
 | `NITI_MIN_DATE` | `2024-01-01` | Fallback earliest date (per-feed `min_date` overrides) |
 | `NITI_MAX_PAGES` | `40` | Safety cap on listing pages walked per feed |
 
@@ -706,7 +718,7 @@ python niti.py && python archive_pdfs.py
 - PDFs only — the feed body is a metadata card (title, division, author, date,
   size) linking the PDF, not extracted document text.
 - Depends on the Drupal table/column markup; a header rename or view change breaks
-  parsing. Some very large reports (tens of MB) are archived on first run.
+  parsing. Archive mode mirrors very large reports (tens of MB) on first run.
 - Unofficial and unaffiliated; content © NITI Aayog, Government of India.
 
 ---

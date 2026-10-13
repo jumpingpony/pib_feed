@@ -30,12 +30,11 @@ class TestArchivePdfs(unittest.TestCase):
         self.assertEqual(archive_pdfs.release_title("image-archive"), "Image Archive")
         self.assertEqual(archive_pdfs.release_title("mygov-2026"), "MyGov Archive 2026")
         self.assertEqual(archive_pdfs.release_title("niti-2026"), "NITI Aayog Archive 2026")
-        self.assertEqual(archive_pdfs.release_title("indianexpress-delhi-2026"), "Indian Express Delhi 2026")
+        self.assertEqual(archive_pdfs.release_title("indianexpress-delhi"), "Indian Express Delhi")
         self.assertEqual(archive_pdfs.release_title("upsc-essentials-2026"), "UPSC Essentials 2026")
         self.assertEqual(archive_pdfs.release_title("visionias-pt365-2026"), "Vision IAS PT 365 Archive 2026")
         self.assertEqual(archive_pdfs.release_title("visionias-mains365-2025"), "Vision IAS Mains 365 Archive 2025")
         self.assertEqual(archive_pdfs.release_title("madeeasy-weekly-2024"), "Made Easy Current Affairs Archive 2024")
-        self.assertEqual(archive_pdfs.release_title("made-easy-ca-2024"), "Made Easy Current Affairs Archive 2024")
         self.assertEqual(archive_pdfs.release_title("nextias-magazine-2025"), "NextIAS Magazine Archive 2025")
         self.assertEqual(archive_pdfs.release_title("economist-images-2026"), "Economist Images Archive 2026")
 
@@ -101,6 +100,36 @@ class TestArchivePdfs(unittest.TestCase):
 
         self.assertIn("mygov-2026", referenced)
         self.assertIn("mygov_2026_01.pdf", referenced["mygov-2026"])
+
+    def test_referenced_assets_full_history(self):
+        feed_dir = os.path.join(self.public_dir, "feed1")
+        os.makedirs(feed_dir, exist_ok=True)
+        old = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=400)
+        old_str = old.strftime("%a, %d %b %Y %H:%M:%S +0000")
+        xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <item>
+      <title>Old Item</title>
+      <pubDate>{old_str}</pubDate>
+      <enclosure url="https://github.com/jumpingpony/pib_feed/releases/download/mygov-2024/old_file.pdf" />
+    </item>
+  </channel>
+</rss>"""
+        with open(os.path.join(feed_dir, "feed.xml"), "w") as f:
+            f.write(xml)
+
+        original_days = archive_pdfs.VERIFY_DAYS
+        try:
+            archive_pdfs.VERIFY_DAYS = 1
+            self.assertNotIn("mygov-2024", archive_pdfs.referenced_assets())
+
+            archive_pdfs.VERIFY_DAYS = 0  # full-history audit
+            referenced = archive_pdfs.referenced_assets()
+            self.assertIn("mygov-2024", referenced)
+            self.assertIn("old_file.pdf", referenced["mygov-2024"])
+        finally:
+            archive_pdfs.VERIFY_DAYS = original_days
 
     def test_parse_args(self):
         args_default = archive_pdfs.parse_args([])
@@ -203,6 +232,42 @@ class TestArchivePdfs(unittest.TestCase):
             self.assertEqual(ret, 1)
         finally:
             archive_pdfs.existing_assets = original_existing
+
+    def test_verify_references_allowlisted_missing(self):
+        feed_dir = os.path.join(self.public_dir, "feed1")
+        os.makedirs(feed_dir, exist_ok=True)
+        now = dt.datetime.now(dt.timezone.utc)
+        now_str = now.strftime("%a, %d %b %Y %H:%M:%S +0000")
+        xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <item>
+      <title>Test Item</title>
+      <pubDate>{now_str}</pubDate>
+      <enclosure url="https://github.com/jumpingpony/pib_feed/releases/download/mygov-2026/mygov_2026_01.pdf" />
+    </item>
+  </channel>
+</rss>"""
+        with open(os.path.join(feed_dir, "feed.xml"), "w") as f:
+            f.write(xml)
+
+        allow_path = os.path.join(self.test_dir, "allow.json")
+        with open(allow_path, "w") as f:
+            json.dump({"mygov-2026": ["mygov_2026_01.pdf"]}, f)
+
+        original_existing = archive_pdfs.existing_assets
+        original_allow = archive_pdfs.ALLOWLIST_PATH
+        try:
+            archive_pdfs.existing_assets = lambda tag: set()
+
+            archive_pdfs.ALLOWLIST_PATH = allow_path
+            self.assertEqual(archive_pdfs.verify_references(now=now), 0)
+
+            archive_pdfs.ALLOWLIST_PATH = ""
+            self.assertEqual(archive_pdfs.verify_references(now=now), 1)
+        finally:
+            archive_pdfs.existing_assets = original_existing
+            archive_pdfs.ALLOWLIST_PATH = original_allow
 
     def test_main_routing(self):
         original_upload = archive_pdfs.upload_manifests

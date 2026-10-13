@@ -31,9 +31,11 @@ new issues and for published issues whose release asset is missing. The release
 inventory is read once with `gh`, so missing uploads are repaired on later runs.
 
 Per-feed `min_date` (or the ARCHIVE_MIN_DATE env fallback) bounds how far back to
-feed/archive. Output: public/<key>/feed.xml + index.html, merged with the
-published feed (IE_EPAPER_PUBLISHED_BASE_URL) so feeds survive past whatever the
-source's index still lists.
+feed/archive; an optional per-feed `window_days` tightens that floor on every run
+(rolling window), so a daily's archive stops growing once issues age out of the
+feed. Output: public/<key>/feed.xml + index.html, merged with the published feed
+(IE_EPAPER_PUBLISHED_BASE_URL) so feeds survive past whatever the source's index
+still lists.
 """
 from __future__ import annotations
 
@@ -66,6 +68,9 @@ ARCHIVE_BASE_URL = os.environ.get("IE_EPAPER_ARCHIVE_BASE_URL", "").strip().rstr
 ARCHIVE_DIR = os.environ.get("ARCHIVE_MANIFEST_DIR", "archive")
 # Fallback earliest issue date (per-feed `min_date` overrides). ISO YYYY-MM-DD.
 ARCHIVE_MIN_DATE = os.environ.get("ARCHIVE_MIN_DATE", "2026-01-01").strip()
+# A daily's archive grows ~9 MB/issue forever, so a feed can cap collection and
+# asset repair with a rolling `window_days`; the published history is unaffected.
+DELHI_WINDOW_DAYS = int(os.environ.get("IE_EPAPER_DELHI_WINDOW_DAYS", "183"))
 
 # One row per epaper title. `type` is the ReadWhere content type used in the
 # download endpoints (magazine vs newspaper); it is NOT interchangeable.
@@ -87,7 +92,11 @@ FEEDS = [
         "name": "Delhi",
         "title": "Delhi Edition - Indian Express",
         "desc": "Unofficial feed of the daily Indian Express Delhi edition (epaper) PDFs.",
+        # Start floor (Aug 2026) plus a rolling ~6-month collection window that
+        # matches the feed's 180-item retention, so the release stops growing
+        # once issues age out of the feed.
         "min_date": "2026-08-01",
+        "window_days": DELHI_WINDOW_DAYS,
         "max_items": 180,
     },
 ]
@@ -130,7 +139,7 @@ def signed_pdf_url(session: requests.Session, feed: dict, issue_id: int) -> str 
 def archive_tags_to_check() -> set[str]:
     """Release tags the asset inventory should list."""
     this_year = dt.datetime.now(IST).year
-    tags = {"pdf-archive"}
+    tags: set[str] = set()
     for feed in FEEDS:
         for year in (this_year, this_year - 1):
             # Same derivation as uploads, so a rolling (unpartitioned) release
@@ -142,7 +151,7 @@ def archive_tags_to_check() -> set[str]:
 
 
 def load_archive_assets(tags: list[str] | None = None) -> set[str] | None:
-    """List assets across target releases and legacy pdf-archive."""
+    """List assets across the target releases."""
     if ARCHIVE_MODE != "archive" or not ARCHIVE_BASE_URL:
         return None
     repo_match = re.search(r"github\.com/([^/]+/[^/]+)/releases/download", ARCHIVE_BASE_URL)
@@ -186,6 +195,16 @@ def load_archive_assets(tags: list[str] | None = None) -> set[str] | None:
     return all_assets
 
 
+def min_date_for(feed: dict) -> str:
+    """Earliest issue date to collect: the static floor, tightened by any rolling window."""
+    floor = feed.get("min_date") or ARCHIVE_MIN_DATE
+    window = feed.get("window_days")
+    if not window:
+        return floor
+    rolling = (dt.datetime.now(IST).date() - dt.timedelta(days=int(window))).isoformat()
+    return max(floor, rolling)
+
+
 def collect(session: requests.Session, feed: dict) -> list[dict]:
     """Enumerate the back-issue index, newest first, from min_date on.
 
@@ -195,7 +214,7 @@ def collect(session: requests.Session, feed: dict) -> list[dict]:
     idx = fetch_json(session, f"{BASE}/api/volumedates_v3/{feed['title_id']}")
     if not isinstance(idx, dict):
         return []
-    min_date = feed.get("min_date") or ARCHIVE_MIN_DATE
+    min_date = min_date_for(feed)
     out = []
     for key, issue_id in sorted(idx.items(), reverse=True):
         if key[:10] < min_date:

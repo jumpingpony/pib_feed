@@ -116,12 +116,34 @@ class TestBuildersUrlTemplating(unittest.TestCase):
         self.assertIn(f"upsc-essentials-{year}", tags)
         self.assertIn(f"upsc-essentials-{year - 1}", tags)
 
+    def test_ie_epaper_rolling_window(self):
+        today = dt.datetime.now(IST).date()
+        window = dt.timedelta(days=ie_epaper.DELHI_WINDOW_DAYS)
+
+        delhi = ie_epaper.FEEDS[1]  # indianexpress-delhi
+        self.assertEqual(
+            ie_epaper.min_date_for(delhi),
+            max(delhi["min_date"], (today - window).isoformat()),
+        )
+
+        # A window with no explicit floor rolls with today's date.
+        self.assertEqual(
+            ie_epaper.min_date_for({"window_days": 10}),
+            (today - dt.timedelta(days=10)).isoformat(),
+        )
+
+        # A static floor with no window never rolls.
+        self.assertEqual(
+            ie_epaper.min_date_for({"min_date": "2025-05-01"}),
+            "2025-05-01",
+        )
+
     def test_visionias_templating(self):
         visioniaspt365.ARCHIVE_MODE = "archive"
         visioniaspt365.ARCHIVE_BASE_URL = "https://github.com/jumpingpony/pib_feed/releases/download/{feed}-{year}"
 
-        feed_pt = visioniaspt365.FEEDS[0]  # key: "visionias-pt-365"
-        feed_mains = visioniaspt365.FEEDS[1]  # key: "visionias-mains-365"
+        feed_pt = visioniaspt365.FEEDS[0]  # key: "visionias_pt-365"
+        feed_mains = visioniaspt365.FEEDS[1]  # key: "visionias_mains-365"
         art_pt = {
             "id": 13229,
             "title": "Culture",
@@ -139,19 +161,19 @@ class TestBuildersUrlTemplating(unittest.TestCase):
 
         self.assertEqual(
             visioniaspt365.archive_tag_for(feed_pt, art_pt),
-            "visionias-pt365-2026",
+            "visionias_pt365-2026",
         )
         self.assertEqual(
             visioniaspt365.item_pdf_url(feed_pt, art_pt),
-            "https://github.com/jumpingpony/pib_feed/releases/download/visionias-pt365-2026/visionias_pt-365_2026_pt-365-culture_13229.pdf",
+            "https://github.com/jumpingpony/pib_feed/releases/download/visionias_pt365-2026/visionias_pt-365_2026_pt-365-culture_13229.pdf",
         )
         self.assertEqual(
             visioniaspt365.archive_tag_for(feed_mains, art_mains),
-            "visionias-mains365-2025",
+            "visionias_mains365-2025",
         )
         self.assertEqual(
             visioniaspt365.item_pdf_url(feed_mains, art_mains),
-            "https://github.com/jumpingpony/pib_feed/releases/download/visionias-mains365-2025/visionias_mains-365_2025_mains-365-economy_9868.pdf",
+            "https://github.com/jumpingpony/pib_feed/releases/download/visionias_mains365-2025/visionias_mains-365_2025_mains-365-economy_9868.pdf",
         )
 
     def test_meca_templating(self):

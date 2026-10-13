@@ -159,44 +159,6 @@ def clean(text: str) -> str:
 ITEM_RE = re.compile(r"<item>.*?</item>", re.S)
 
 
-def tag_text(block: str, tag: str) -> str:
-    m = re.search(rf"<{tag}>(.*?)</{tag}>", block, re.S)
-    if not m:
-        return ""
-    val = m.group(1).strip()
-    cm = re.match(r"<!\[CDATA\[(.*?)\]\]>\s*$", val, re.S)
-    return (cm.group(1) if cm else val).strip()
-
-
-def parse_rss(xml: str) -> list[dict]:
-    out: list[dict] = []
-    seen: set[str] = set()
-    for m in ITEM_RE.finditer(xml or ""):
-        b = m.group(0)
-        link = html.unescape(tag_text(b, "link")).strip()
-        if not link or link in seen:
-            continue
-        seen.add(link)
-        out.append(
-            {
-                "link": link,
-                "title": clean(tag_text(b, "title")),
-                "author": clean(tag_text(b, "dc:creator")),
-                "date": parse_rfc822(tag_text(b, "pubDate")),
-            }
-        )
-    return out
-
-
-def parse_rfc822(s: str) -> dt.datetime | None:
-    if not s:
-        return None
-    try:
-        return parsedate_to_datetime(s.strip())
-    except (TypeError, ValueError):
-        return None
-
-
 def parse_api_date(value: str) -> dt.datetime | None:
     try:
         parsed = dt.datetime.fromisoformat(value)
@@ -228,10 +190,6 @@ def parse_api_items(raw_items: list[dict]) -> list[dict]:
 
 
 # --- article body -------------------------------------------------------------
-OG_IMAGE_RE = re.compile(r'<meta property="og:image" content="([^"]+)"')
-BODY_START = 'id="pcl-full-content"'
-# markers that reliably sit just past the article body
-END_MARKERS = ("ie-first-publish", 'id="myexpress_artp', '<div class="ie-network', "story-tags")
 BLOCK_RE = re.compile(r"<p\b[^>]*>.*?</p>|<h[234]\b[^>]*>.*?</h[234]>|<img\b[^>]*>", re.S | re.I)
 IMG_SRC_RE = re.compile(r'\b(?:data-lazy-src|data-src|src)="([^"]+)"')
 # The site's generic lead-image placeholder, served when an article has no real
@@ -257,23 +215,6 @@ def tidy(inner: str) -> str:
     inner = UNWRAP_RE.sub("", inner)
     inner = ATTR_STRIP_RE.sub("", inner)
     return re.sub(r"\s{2,}", " ", inner).strip()
-
-
-def parse_article(page: str) -> tuple[str, list[tuple[str, str]]]:
-    """Return (hero_image, [(kind, html), ...]) where kind is p / h / img."""
-    if not page:
-        return "", []
-    ogm = OG_IMAGE_RE.search(page)
-    hero = html.unescape(ogm.group(1)) if ogm else ""
-    if hero and _is_placeholder(hero):
-        hero = ""
-    i = page.find(BODY_START)
-    if i < 0:
-        return hero, []
-    tail = page[i:]
-    ends = [p for p in (tail.find(m) for m in END_MARKERS) if p > 0]
-    seg = tail[: min(ends)] if ends else tail[:14000]
-    return hero, parse_content_blocks(seg)
 
 
 def parse_content_blocks(content: str) -> list[tuple[str, str]]:

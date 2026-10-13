@@ -430,8 +430,6 @@ def write_feed(feed: dict, xml: str, count: int) -> None:
 # --- main ---------------------------------------------------------------------
 def write_manifest(key: str, entries: list[dict]) -> None:
     """Write {name,url} pairs the release uploader should mirror."""
-    import json
-
     os.makedirs(ARCHIVE_DIR, exist_ok=True)
     path = os.path.join(ARCHIVE_DIR, f"{key}.json")
     with open(path, "w", encoding="utf-8") as f:

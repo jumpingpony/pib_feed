@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import datetime as dt
 import html
+import json
 import os
 import re
 import sys
@@ -60,19 +61,22 @@ ARCHIVE_DIR = os.environ.get("ARCHIVE_MANIFEST_DIR", "archive")
 # Feed/archive only documents published in this year or later (bounds the PDF
 # archive size); 2025+ means future years are included automatically.
 ARCHIVE_MIN_YEAR = int(os.environ.get("ARCHIVE_MIN_YEAR", "2025"))
+# One-off switch (VIS_REBUILD=1): re-render every listed in-range document,
+# e.g. after flipping archive mode so stored items stop linking release assets.
+REBUILD = os.environ.get("VIS_REBUILD", "0").strip().lower() in ("1", "true", "yes")
 
 # Each item title is rendered "[YEAR | post title]" and items are ordered newest
 # year first; the year comes from the listing's year-group headers (authoritative).
 FEEDS = [
     {
-        "key": "visionias-pt-365",
+        "key": "visionias_pt-365",
         "title": "PT 365 - Vision IAS",
         "desc": "Unofficial feed of Vision IAS PT 365 current-affairs PDFs, by year.",
         "section": "pt-365",
         "max_items": 200,
     },
     {
-        "key": "visionias-mains-365",
+        "key": "visionias_mains-365",
         "title": "Mains 365 - Vision IAS",
         "desc": "Unofficial feed of Vision IAS Mains 365 current-affairs PDFs, by year.",
         "section": "mains-365",
@@ -254,10 +258,20 @@ def load_published(session: requests.Session, key: str) -> dict[int, str]:
     return items
 
 
+def render_title(art: dict) -> str:
+    """Clean title: drop the [year | ...] wrapper and underscores, keep the year once."""
+    title = re.sub(r"_+", " ", art["title"])
+    title = re.sub(r"\s{2,}", " ", title).strip()
+    year = art.get("year")
+    if year and str(year) not in title:
+        return f"{title} ({year})"
+    return title
+
+
 def render_item(feed: dict, art: dict) -> str:
     pub = art["date"] or dt.datetime.now(IST)
     pdf = item_pdf_url(feed, art)
-    display = f"[{art['year']} | {art['title']}]"
+    display = render_title(art)
     body = (
         f'<p><a href="{escape(pdf)}">{escape(art["title"])} (PDF)</a></p>\n'
         f'<p>Source: <a href="{escape(art["link"])}">{escape(art["link"])}</a></p>'
@@ -265,7 +279,7 @@ def render_item(feed: dict, art: dict) -> str:
     return (
         "    <item>\n"
         f"      <title>{escape(display)}</title>\n"
-        f"      <link>{escape(art['link'])}</link>\n"
+        f"      <link>{escape(pdf)}</link>\n"
         f"      <guid isPermaLink=\"true\">{escape(art['link'])}</guid>\n"
         f"      <pubDate>{format_datetime(pub)}</pubDate>\n"
         f'      <enclosure url="{escape(pdf)}" type="application/pdf" />\n'
@@ -341,8 +355,6 @@ def write_feed(feed: dict, xml: str, count: int) -> None:
 # --- main ---------------------------------------------------------------------
 def write_manifest(key: str, entries: list[dict]) -> None:
     """Write {name,url} pairs the release uploader should mirror."""
-    import json
-
     os.makedirs(ARCHIVE_DIR, exist_ok=True)
     path = os.path.join(ARCHIVE_DIR, f"{key}.json")
     with open(path, "w", encoding="utf-8") as f:
@@ -359,19 +371,20 @@ def run_feed(session: requests.Session, feed: dict) -> int:
     # differently from the listing. While the feed is below its cap, inspect the
     # complete metadata listing and fetch details only for missing in-range IDs.
     # At the cap, stop at published history so old aged-out items stay omitted.
+    # Rebuild fetches every listed in-range id (no cap) so stored items are re-rendered.
     ids = []
     at_capacity = len(existing) >= feed["max_items"]
     for item_id, year in ymap.items():
-        if item_id in existing:
+        if item_id in existing and not REBUILD:
             if at_capacity:
                 break
             continue
         if (year or now_year) >= ARCHIVE_MIN_YEAR:
             ids.append(item_id)
-        if len(ids) >= MAX_FETCH:
+        if len(ids) >= MAX_FETCH and not REBUILD:
             break
     print(f"  {feed['section']}: {len(ids)} newer document ids")
-    found = 0
+    found, rebuilt = 0, 0
     manifest: list[dict] = []
     with ThreadPoolExecutor(max_workers=WORKERS) as ex:
         futs = {ex.submit(parse_doc, session, feed["section"], i, ymap.get(i)): i for i in ids}
@@ -381,8 +394,11 @@ def run_feed(session: requests.Session, feed: dict) -> int:
                 continue
             if (art["year"] or now_year) < ARCHIVE_MIN_YEAR:
                 continue
+            if art["id"] in existing:
+                rebuilt += 1
+            else:
+                found += 1
             existing[art["id"]] = render_item(feed, art).strip()
-            found += 1
             if ARCHIVE_MODE == "archive":
                 manifest.append({
                     "name": art["archival_name"],
@@ -394,7 +410,7 @@ def run_feed(session: requests.Session, feed: dict) -> int:
     xml = build_feed(feed, existing)
     kept = min(len(existing), feed["max_items"])
     write_feed(feed, xml, kept)
-    print(f"  {feed['key']}: fetched {found}, feed now {kept}")
+    print(f"  {feed['key']}: fetched {found}, rebuilt {rebuilt}, feed now {kept}")
     return kept
 
 

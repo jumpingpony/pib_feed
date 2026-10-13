@@ -16,8 +16,8 @@
         <outline type="rss" text="News On AIR - All India Radio" title="News On AIR - All India Radio" xmlUrl="https://jumpingpony.github.io/pib_feed/newsonair/feed.xml" htmlUrl="https://newsonair.gov.in"/>
       </outline>
       <outline text="Current Affairs (Vision IAS / Made Easy / NextIAS)" title="Current Affairs (Vision IAS / Made Easy / NextIAS)">
-        <outline type="rss" text="PT 365 - Vision IAS" title="PT 365 - Vision IAS" xmlUrl="https://jumpingpony.github.io/pib_feed/visionias-pt-365/feed.xml" htmlUrl="https://visionias.in/current-affairs/downloads/pt-365"/>
-        <outline type="rss" text="Mains 365 - Vision IAS" title="Mains 365 - Vision IAS" xmlUrl="https://jumpingpony.github.io/pib_feed/visionias-mains-365/feed.xml" htmlUrl="https://visionias.in/current-affairs/downloads/mains-365"/>
+        <outline type="rss" text="PT 365 - Vision IAS" title="PT 365 - Vision IAS" xmlUrl="https://jumpingpony.github.io/pib_feed/visionias_pt-365/feed.xml" htmlUrl="https://visionias.in/current-affairs/downloads/pt-365"/>
+        <outline type="rss" text="Mains 365 - Vision IAS" title="Mains 365 - Vision IAS" xmlUrl="https://jumpingpony.github.io/pib_feed/visionias_mains-365/feed.xml" htmlUrl="https://visionias.in/current-affairs/downloads/mains-365"/>
         <outline type="rss" text="Weekly Current Affairs - Made Easy" title="Weekly Current Affairs - Made Easy" xmlUrl="https://jumpingpony.github.io/pib_feed/madeeasy-weekly/feed.xml" htmlUrl="https://www.madeeasy.in/weekly-current-affairs"/>
         <outline type="rss" text="Monthly Current Affairs Magazine - NextIAS" title="Monthly Current Affairs Magazine - NextIAS" xmlUrl="https://jumpingpony.github.io/pib_feed/nextias-magazine/feed.xml" htmlUrl="https://www.nextias.com/current-affairs-magazine"/>
       </outline>
@@ -70,11 +70,11 @@
         <outline type="rss" text="Magazine - India Today" title="Magazine - India Today" xmlUrl="https://jumpingpony.github.io/pib_feed/indiatoday_magazine/feed.xml" htmlUrl="https://www.indiatoday.in/magazine"/>
       </outline>
       <outline text="NITI Aayog (unofficial, PDF)" title="NITI Aayog (unofficial, PDF)">
-        <outline type="rss" text="Division Reports - NITI Aayog" title="Division Reports - NITI Aayog" xmlUrl="https://jumpingpony.github.io/pib_feed/niti-reports/feed.xml" htmlUrl="https://www.niti.gov.in/publications/division-reports"/>
-        <outline type="rss" text="Working Papers - NITI Aayog" title="Working Papers - NITI Aayog" xmlUrl="https://jumpingpony.github.io/pib_feed/niti-working-papers/feed.xml" htmlUrl="https://www.niti.gov.in/publications/working-papers"/>
-        <outline type="rss" text="Research Papers - NITI Aayog" title="Research Papers - NITI Aayog" xmlUrl="https://jumpingpony.github.io/pib_feed/niti-research-papers/feed.xml" htmlUrl="https://www.niti.gov.in/publications/research-paper"/>
-        <outline type="rss" text="Policy Papers - NITI Aayog" title="Policy Papers - NITI Aayog" xmlUrl="https://jumpingpony.github.io/pib_feed/niti-policy-papers/feed.xml" htmlUrl="https://www.niti.gov.in/publications/policy-and-research/policy-paper"/>
-        <outline type="rss" text="Annual Reports - NITI Aayog" title="Annual Reports - NITI Aayog" xmlUrl="https://jumpingpony.github.io/pib_feed/niti-annual-reports/feed.xml" htmlUrl="https://www.niti.gov.in/publication/annual-report"/>
+        <outline type="rss" text="Division Reports - NITI Aayog" title="Division Reports - NITI Aayog" xmlUrl="https://jumpingpony.github.io/pib_feed/niti_reports/feed.xml" htmlUrl="https://www.niti.gov.in/publications/division-reports"/>
+        <outline type="rss" text="Working Papers - NITI Aayog" title="Working Papers - NITI Aayog" xmlUrl="https://jumpingpony.github.io/pib_feed/niti_working-papers/feed.xml" htmlUrl="https://www.niti.gov.in/publications/working-papers"/>
+        <outline type="rss" text="Research Papers - NITI Aayog" title="Research Papers - NITI Aayog" xmlUrl="https://jumpingpony.github.io/pib_feed/niti_research-papers/feed.xml" htmlUrl="https://www.niti.gov.in/publications/research-paper"/>
+        <outline type="rss" text="Policy Papers - NITI Aayog" title="Policy Papers - NITI Aayog" xmlUrl="https://jumpingpony.github.io/pib_feed/niti_policy-papers/feed.xml" htmlUrl="https://www.niti.gov.in/publications/policy-and-research/policy-paper"/>
+        <outline type="rss" text="Annual Reports - NITI Aayog" title="Annual Reports - NITI Aayog" xmlUrl="https://jumpingpony.github.io/pib_feed/niti_annual-reports/feed.xml" htmlUrl="https://www.niti.gov.in/publication/annual-report"/>
       </outline>
       <outline text="IPCS (Institute of Peace and Conflict Studies)" title="IPCS (Institute of Peace and Conflict Studies)">
         <outline type="rss" text="Commentaries - IPCS" title="Commentaries - IPCS" xmlUrl="https://jumpingpony.github.io/pib_feed/ipcs-commentaries/feed.xml" htmlUrl="https://www.ipcs.org/commentaries.php"/>

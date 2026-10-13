@@ -4,8 +4,8 @@ into GitHub Releases, so RSS feeds can link to durable copies without bloating
 the repo or GitHub Pages site.
 
 Supports multi-release tagging (e.g. newspaper-2026, mygov-2026, niti-2026,
-visionias-pt365-2026, made-easy-ca-2026, economist-images-2026) alongside legacy
-pdf-archive and image-archive releases.
+visionias-pt365-2026, madeeasy-weekly-2026, economist-images-2026) alongside the
+legacy pdf-archive and image-archive tags.
 
 Inputs: the `archive/<key>.json` manifests written by feed builders. Each is a
 list of {name, url, tag?}: `name` is the archival filename, `url` is the source
@@ -16,7 +16,8 @@ Requires the `gh` CLI authenticated with a token that can edit releases
     ARCHIVE_RELEASE_TAG   default release tag (default pdf-archive)
     ARCHIVE_MANIFEST_DIR  where the *.json manifests live (default archive)
     ARCHIVE_REFERENCE_DIR generated feeds to verify (default public)
-    ARCHIVE_VERIFY_DAYS   recent publication window to verify (default 1)
+    ARCHIVE_VERIFY_DAYS   recent publication window to verify (default 1,
+                          0 verifies every published item)
     ARCHIVE_VERIFY_ONLY   set to 1/true to run verification instead of uploads
 
 CLI Usage:
@@ -44,7 +45,9 @@ import requests
 DEFAULT_TAG = os.environ.get("ARCHIVE_RELEASE_TAG", "pdf-archive")
 MANIFEST_DIR = os.environ.get("ARCHIVE_MANIFEST_DIR", "archive")
 REFERENCE_DIR = os.environ.get("ARCHIVE_REFERENCE_DIR", "public")
-VERIFY_DAYS = max(1, int(os.environ.get("ARCHIVE_VERIFY_DAYS", "1")))
+VERIFY_DAYS = int(os.environ.get("ARCHIVE_VERIFY_DAYS", "1"))
+# Optional JSON of {tag: [filename, ...]} references accepted as known-missing.
+ALLOWLIST_PATH = os.environ.get("ARCHIVE_VERIFY_ALLOWLIST", "")
 # Overridable because some sources (e.g. Economist content-assets images) are
 # Cloudflare-protected and only serve to a specific whitelisted UA.
 UA = os.environ.get(
@@ -91,8 +94,6 @@ def release_title(tag: str) -> str:
         return f"NITI Aayog Archive {tag.split('-', 1)[1]}"
     if tag == "indianexpress-delhi":
         return "Indian Express Delhi"
-    if tag.startswith("indianexpress-delhi-"):
-        return f"Indian Express Delhi {tag.split('-', 2)[2]}"
     if tag.startswith("upsc-essentials-"):
         return f"UPSC Essentials {tag.split('-', 2)[2]}"
     if tag.startswith("visionias-pt365-"):
@@ -101,8 +102,6 @@ def release_title(tag: str) -> str:
         return f"Vision IAS Mains 365 Archive {tag.split('-', 2)[2]}"
     if tag.startswith("madeeasy-weekly-"):
         return f"Made Easy Current Affairs Archive {tag.split('-', 2)[2]}"
-    if tag.startswith("made-easy-ca-"):
-        return f"Made Easy Current Affairs Archive {tag.split('-', 3)[3]}"
     if tag.startswith("nextias-magazine-"):
         return f"NextIAS Magazine Archive {tag.split('-', 2)[2]}"
     if tag.startswith("economist-images-"):
@@ -134,7 +133,10 @@ def ensure_release(tag: str) -> None:
 
 
 def existing_assets(tag: str) -> set[str]:
-    res = gh_retry("release", "view", tag, "--json", "assets")
+    # A missing release is a definitive answer; retrying only burns backoff.
+    res = gh("release", "view", tag, "--json", "assets", check=False)
+    if res.returncode != 0 and "not found" not in res.stderr.lower():
+        res = gh_retry("release", "view", tag, "--json", "assets")
     if res.returncode != 0:
         print(f"  warning: cannot read existing assets for {tag}: {res.stderr.strip()}", file=sys.stderr)
         return set()
@@ -165,14 +167,18 @@ def load_manifests() -> dict[str, dict[str, str]]:
 
 
 def referenced_assets(now: dt.datetime | None = None) -> dict[str, set[str]]:
-    """Return release assets linked by recently published feed items grouped by tag."""
+    """Return release assets linked by feed items grouped by tag.
+
+    VERIFY_DAYS > 0 limits the scan to items published within that window;
+    0 scans every item (full-history audit).
+    """
     marker = re.compile(r"/releases/download/([^/\s<>'\"?#]+)/([^/\s<>'\"?#]+)", re.I)
     item_marker = re.compile(r"<item\b.*?</item>", re.S | re.I)
     date_marker = re.compile(r"<pubDate>([^<]+)</pubDate>", re.I)
     now = now or dt.datetime.now(dt.timezone.utc)
     if now.tzinfo is None:
         now = now.replace(tzinfo=dt.timezone.utc)
-    cutoff = now - dt.timedelta(days=VERIFY_DAYS)
+    cutoff = now - dt.timedelta(days=VERIFY_DAYS) if VERIFY_DAYS > 0 else None
     referenced: dict[str, set[str]] = defaultdict(set)
     for path in glob.glob(os.path.join(REFERENCE_DIR, "**", "feed.xml"), recursive=True):
         try:
@@ -188,7 +194,7 @@ def referenced_assets(now: dt.datetime | None = None) -> dict[str, set[str]]:
                     published = parsedate_to_datetime(date_match.group(1))
                     if published.tzinfo is None:
                         published = published.replace(tzinfo=dt.timezone.utc)
-                    if published < cutoff:
+                    if cutoff and published < cutoff:
                         continue
                 except (TypeError, ValueError):
                     pass
@@ -259,9 +265,23 @@ def upload_manifests() -> int:
     return 0
 
 
+def load_allowlist() -> dict[str, set[str]]:
+    """References accepted as known-missing (no release asset, by policy)."""
+    if not ALLOWLIST_PATH or not os.path.exists(ALLOWLIST_PATH):
+        return {}
+    try:
+        with open(ALLOWLIST_PATH, encoding="utf-8") as f:
+            data = json.load(f)
+    except (ValueError, OSError) as e:
+        print(f"  cannot read allowlist {ALLOWLIST_PATH}: {e}", file=sys.stderr)
+        return {}
+    return {tag: set(names) for tag, names in data.items() if isinstance(names, list)}
+
+
 def verify_references(now: dt.datetime | None = None) -> int:
-    """Verify that all recently referenced release assets across all feeds exist in GitHub Releases."""
+    """Verify that all referenced release assets across all feeds exist in GitHub Releases."""
     ref_by_tag = referenced_assets(now=now)
+    allow = load_allowlist()
     missing: list[tuple[str, str]] = []
     have_by_tag: dict[str, set[str]] = {}
 
@@ -270,6 +290,9 @@ def verify_references(now: dt.datetime | None = None) -> int:
         have_by_tag[tag] = have
         tag_missing = sorted(ref_by_tag[tag] - have)
         for name in tag_missing:
+            if name in allow.get(tag, set()):
+                print(f"  known-missing (allowlisted): [{tag}] {name}")
+                continue
             print(f"  missing release asset: [{tag}] {name}", file=sys.stderr)
             missing.append((tag, name))
 

@@ -55,12 +55,15 @@ ARCHIVE_DIR = os.environ.get("ARCHIVE_MANIFEST_DIR", "archive")
 DEFAULT_MIN_DATE = os.environ.get("NITI_MIN_DATE", "2024-01-01").strip()
 # Hard cap on how many listing pages to walk per feed (safety net over the pager).
 MAX_PAGES = int(os.environ.get("NITI_MAX_PAGES", "40"))
+# One-off switch (NITI_REBUILD=1): re-render every in-range item, e.g. after
+# flipping archive mode so stored items stop linking release assets.
+REBUILD = os.environ.get("NITI_REBUILD", "0").strip().lower() in ("1", "true", "yes")
 
 # One row per NITI publication listing. `parser` is "table" (Drupal views table with
 # a <thead> that names its columns) or "anchors" (a plain list of <a>..pdf</a>).
 FEEDS = [
     {
-        "key": "niti-reports",
+        "key": "niti_reports",
         "parser": "table",
         "path": "/publications/division-reports",
         "name": "NITI Aayog Reports",
@@ -70,7 +73,7 @@ FEEDS = [
         "max_items": 500,
     },
     {
-        "key": "niti-working-papers",
+        "key": "niti_working-papers",
         "parser": "table",
         "path": "/publications/working-papers",
         "name": "NITI Aayog Working Papers",
@@ -80,7 +83,7 @@ FEEDS = [
         "max_items": 200,
     },
     {
-        "key": "niti-research-papers",
+        "key": "niti_research-papers",
         "parser": "table",
         "path": "/publications/research-paper",
         "name": "NITI Aayog Research Papers",
@@ -90,7 +93,7 @@ FEEDS = [
         "max_items": 200,
     },
     {
-        "key": "niti-policy-papers",
+        "key": "niti_policy-papers",
         "parser": "table",
         "path": "/publications/policy-and-research/policy-paper",
         "name": "NITI Aayog Policy Papers",
@@ -100,7 +103,7 @@ FEEDS = [
         "max_items": 200,
     },
     {
-        "key": "niti-annual-reports",
+        "key": "niti_annual-reports",
         "parser": "anchors",
         "path": "/publication/annual-report",
         "name": "NITI Aayog Annual Reports",
@@ -451,8 +454,9 @@ def write_manifest(key: str, entries: list[dict]) -> None:
 def run_feed(session: requests.Session, feed: dict) -> int:
     print(f"[{feed['key']}]")
     merged = load_published(session, feed["key"])
-    arts = collect(session, feed, set(merged))
-    new, manifest, seen_names = 0, [], set()
+    # Rebuild walks the whole in-range listing so every stored item is re-rendered.
+    arts = collect(session, feed, set() if REBUILD else set(merged))
+    new, rebuilt, manifest, seen_names = 0, 0, [], set()
     for art in arts:
         if ARCHIVE_MODE == "archive":
             name = archival_name_of(art)
@@ -460,14 +464,20 @@ def run_feed(session: requests.Session, feed: dict) -> int:
                 seen_names.add(name)
                 manifest.append({"name": name, "url": art["pdf"], "tag": archive_tag_for(art)})
         if art["pdf"] in merged:
-            continue  # already published; item already points at the durable asset
+            if not REBUILD:
+                continue  # already published; item already points at the durable asset
+            rebuilt += 1
+        else:
+            new += 1
         merged[art["pdf"]] = (render_item(art).strip(), art["date"] or dt.datetime.now(IST))
-        new += 1
     if ARCHIVE_MODE == "archive":
         write_manifest(feed["key"], manifest)
     xml, kept = build_feed(feed, merged)
     write_feed(feed, xml, kept)
-    print(f"  {feed['key']}: {len(arts)} scanned, +{new} new, {len(manifest)} to archive, feed now {kept}")
+    print(
+        f"  {feed['key']}: {len(arts)} scanned, +{new} new, {rebuilt} rebuilt, "
+        f"{len(manifest)} to archive, feed now {kept}"
+    )
     return kept
 
 

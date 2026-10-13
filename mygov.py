@@ -22,6 +22,7 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import html
+import json
 import os
 import re
 import sys
@@ -365,8 +366,6 @@ def write_feed(feed: dict, xml: str, count: int) -> None:
 
 
 def write_manifest(key: str, entries: list[dict]) -> None:
-    import json
-
     os.makedirs(ARCHIVE_DIR, exist_ok=True)
     path = os.path.join(ARCHIVE_DIR, f"{key}.json")
     with open(path, "w", encoding="utf-8") as f:

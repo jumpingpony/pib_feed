@@ -39,7 +39,6 @@ IST = dt.timezone(dt.timedelta(hours=5, minutes=30))
 WORKERS = int(os.environ.get("NOA_WORKERS", "1"))
 TIMEOUT = int(os.environ.get("NOA_TIMEOUT", "20"))
 RETRIES = int(os.environ.get("NOA_RETRIES", "1"))
-DELAY = float(os.environ.get("NOA_DELAY", "0.3"))
 RETRY_GAP = 1.0
 OUT_DIR = os.environ.get("NOA_OUT_DIR", "public")
 PUBLISHED_BASE_URL = os.environ.get("NOA_PUBLISHED_BASE_URL", "").strip().rstrip("/")
