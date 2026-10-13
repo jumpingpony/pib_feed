@@ -17,6 +17,10 @@ on:
         description: "Vision IAS: re-render every listed document (1 = rebuild, 0 = off)"
         type: string
         default: "0"
+      pubdate_stagger:
+        description: "NITI/Vision IAS: re-date stale items for Inoreader import (1 = on)"
+        type: string
+        default: "0"
   push:
     branches: [main]
     paths:
@@ -42,6 +46,7 @@ on:
       - theprint.py
       - ft.py
       - archive_pdfs.py
+      - stagger_pubdates.py
       - .github/workflows/build-feeds.yml
 
 permissions:
@@ -271,6 +276,14 @@ jobs:
           # Accepted gaps: MyGov 2024 items kept local only (no release).
           ARCHIVE_VERIFY_ALLOWLIST: ".github/known-missing-assets.json"
         run: python archive_pdfs.py --verify
+
+      # One-off import fix (dispatch input pubdate_stagger=1): Inoreader drops
+      # items older than ~2 weeks when a feed is (re)subscribed, so pull the
+      # stale NITI/Vision items into the last 12 days before deploying. Later
+      # builds keep the re-dated blocks via the published-base merge.
+      - name: Stagger old item dates for Inoreader import
+        if: ${{ github.event.inputs.pubdate_stagger == '1' }}
+        run: python stagger_pubdates.py
 
       # Publish whatever built (this runs before the gate so a failed feed never
       # blocks deploying the healthy ones), then fail the run if any step failed.
