@@ -55,6 +55,23 @@ Examples of useful probes include:
 - Logging status, final URL, content type, response size, selected headers, a short body excerpt, and parsed result counts without printing credentials, complete cookie values, or full protected content.
 - Running and watching the temporary workflow with `gh workflow run probe.yml` and `gh run watch <run-id> --exit-status`, then deleting the probe workflow once the production path is understood.
 
+## Inoreader Import Window
+
+Inoreader keeps at most ~100 items per feed and, at subscribe time, drops items
+published more than roughly two weeks earlier. A rarely-updated feed therefore
+imports empty even though the feed itself is valid. When building or
+re-subscribing a feed whose items are mostly older than that, tell the user and
+suggest the one-off re-stagger before subscribing:
+
+```bash
+gh workflow run build-feeds.yml -f pubdate_stagger=1
+```
+
+`stagger_pubdates.py` re-dates stale items into the last 12 days (Hindi items
+keep their real dates); later builds keep those blocks via the published-base
+merge. Feed paths renamed after publication must keep serving both the old and
+new URLs; see the *Copy legacy NITI/Vision feed paths* step.
+
 ## Commit & Pull Request Guidelines
 
 Use short, imperative commit subjects consistent with history, such as `Add Frontline magazine and blog feeds` or `Fix PS body regex`. Keep each commit scoped to one source or infrastructure concern. Pull requests should state the affected feeds, explain parser or output changes, include a sample generated feed path or URL, and note any new environment variables, archive behavior, or source-site assumptions. Update `DOCS.md` and relevant `OPML/` files when adding or removing published feeds.

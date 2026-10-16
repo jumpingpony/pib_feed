@@ -1103,3 +1103,29 @@ Ready-to-import OPML bundles live in `OPML/`: `pib.opml`, `newsonair.opml`,
 `ft.opml`, `indianexpress.opml` (includes UPSC Essentials), `indiatoday.opml`,
 `niti.opml`, `ipcs.opml`, `indiasworld.opml`, `frontline.opml`, `toi.opml`,
 `theprint.opml`, and `all.opml` (every feed, grouped).
+
+---
+
+# Inoreader import window (pubDate staggering)
+
+Inoreader keeps at most ~100 items per feed and, when a feed is subscribed,
+drops items published more than roughly two weeks earlier. Feeds whose items
+are all older than that (backfills, rarely-updated sources) import empty even
+though the feed itself is valid and served over HTTP.
+
+Two workflow pieces counter this for the affected feeds:
+
+- `stagger_pubdates.py` — one-off, gated by the `pubdate_stagger` dispatch
+  input (`gh workflow run build-feeds.yml -f pubdate_stagger=1`). It re-dates
+  every stale item into the last 12 days (newest source item first) in the
+  deployed XML; items already inside the window and Hindi items keep their
+  real dates. The builders' published-base merge then keeps the re-dated
+  blocks on later runs, and new items arrive with real dates.
+- **Copy legacy NITI/Vision feed paths** step — copies each renamed feed
+  (`niti-reports` → `niti_reports`, …, `visionias-mains-365` →
+  `visionias_mains-365`) to its pre-2026-10-13 hyphen path on every build, so
+  readers still polling the old URLs get the same feed instead of a 404.
+
+Suggest the stagger to the user before subscribing or re-subscribing a feed
+whose items would fall outside Inoreader's window, then re-subscribe so
+Inoreader imports the refreshed items.

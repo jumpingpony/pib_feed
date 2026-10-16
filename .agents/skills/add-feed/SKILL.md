@@ -177,6 +177,7 @@ Consult this non-exhaustive reference checklist during research for inspiration,
 6. **Reader Subscription** (only after a green run):
    - If Inoreader integration is requested, use the OAuth credentials in `.inoreaderconfig`; `scripts/inoreader_migrate.py` shows the API pattern.
    - **Ask the user which folder** to file the feed under; do not assume one. Offer only real folders from the local cache `scratch/inoreader_folders.json` (gitignored). In this account only the `Tier *` labels are folders; every other label returned by the API is an entry tag, not a subscription target.
+   - **Suggest the re-stagger for rarely-updated feeds**: Inoreader drops items older than roughly two weeks at subscribe time, so a feed with few updates (or a backfill) imports empty. Tell the user and offer `gh workflow run build-feeds.yml -f pubdate_stagger=1` (`stagger_pubdates.py`), then subscribe after that run deploys.
    - **Conserve Inoreader's quota (~100 requests/day)**: use the cache and refresh it only when the user asks (filtering the API labels down to the `Tier *` folders); keep the subscription itself to `subscription/quickadd`, then `subscription/edit` (`ac=edit`, `s=<streamId>`, `t=<title>`, `a=user/-/label/<folder>`), plus at most one verifying `subscription/list`.
    - If the API answers 401, refresh the access token first with the `refresh_token` grant on `https://www.inoreader.com/oauth2/token` (`client_id=app_id`, `client_secret=app_key`) and persist it.
    - Verify and report the feed title and folder.
