@@ -21,6 +21,10 @@ sub-headings and inline images), skipping the interleaved ad / Taboola /
 "also read" / related-story widgets. Images sit on Indian Express's own CDN and
 hotlink fine, so nothing is archived.
 
+The listing's `ie_byline_authors` terms give each item its byline (names), and
+the author's one-line profile bio comes from the IE profile API
+(`/wp-json/wp/v3/profilebyslug/<slug>`); both open the item body when present.
+
   indianexpress-explained  /section/explained/feed/
   indianexpress-opinion    /section/opinion/feed/
 
@@ -43,7 +47,14 @@ from xml.sax.saxutils import escape
 import requests
 
 BASE = "https://indianexpress.com"
-REST_BASE = "https://indianexpress-com.translate.goog/wp-json/wp/v2/article"
+# GitHub runners are rejected by the origin's CloudFront, so every API call goes
+# through Google's translation relay, which those runners may use.
+API_ROOT = "https://indianexpress-com.translate.goog/wp-json"
+REST_BASE = f"{API_ROOT}/wp/v2/article"
+BYLINE_TERMS_API = f"{API_ROOT}/wp/v2/ie_byline_authors"
+BYLINE_PROFILE_API = f"{API_ROOT}/wp/v3/profilebyslug"
+# Language passthrough every relayed API call carries.
+TRANSLATE_PARAMS = {"_x_tr_sl": "auto", "_x_tr_tl": "en", "_x_tr_hl": "en"}
 UA = (
     "Mozilla/5.0 (Linux; Android 15; Pixel 8) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/151.0.7922.71 Mobile Safari/537.36"
@@ -89,11 +100,11 @@ def make_session() -> requests.Session:
     return s
 
 
-def fetch(session: requests.Session, url: str) -> str | None:
+def fetch(session: requests.Session, url: str, params: dict | None = None) -> str | None:
     last = None
     for _ in range(RETRIES + 1):
         try:
-            r = session.get(url, timeout=TIMEOUT, allow_redirects=True)
+            r = session.get(url, params=params, timeout=TIMEOUT, allow_redirects=True)
             if r.status_code == 200 and r.text:
                 r.encoding = r.apparent_encoding or "utf-8"
                 return r.text
@@ -112,9 +123,7 @@ def fetch_api_items(session: requests.Session, section_id: int) -> list[dict]:
         "ie_section": section_id,
         "per_page": 100,
         "_fields": "id,date,link,title,content,featured_media,ie_byline_authors",
-        "_x_tr_sl": "auto",
-        "_x_tr_tl": "en",
-        "_x_tr_hl": "en",
+        **TRANSLATE_PARAMS,
     }
     last = None
     for _ in range(RETRIES + 1):
@@ -182,11 +191,84 @@ def parse_api_items(raw_items: list[dict]) -> list[dict]:
                 "link": link,
                 "title": clean(str(title.get("rendered", ""))),
                 "author": "",
+                "author_bio": "",
+                "author_ids": [i for i in raw.get("ie_byline_authors") or [] if i],
                 "date": parse_api_date(str(raw.get("date", ""))),
                 "content": str(content.get("rendered", "")),
             }
         )
     return items
+
+
+# --- bylines ------------------------------------------------------------------
+# Profile bios vary from one line to several paragraphs; keep the lead sentence.
+AUTHOR_BIO_LEN = 300
+
+
+def fetch_author_terms(session: requests.Session, ids: list[int]) -> dict[int, dict]:
+    """Resolve byline-term ids to {name, slug} in one batched call."""
+    if not ids:
+        return {}
+    params = {
+        "include": ",".join(str(i) for i in ids),
+        "per_page": 100,
+        "_fields": "id,name,slug",
+        **TRANSLATE_PARAMS,
+    }
+    text = fetch(session, BYLINE_TERMS_API, params)
+    if not text:
+        return {}
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return {}
+    if not isinstance(data, list):
+        return {}
+    return {int(t["id"]): t for t in data if isinstance(t, dict) and t.get("id")}
+
+
+def fetch_author_bio(session: requests.Session, slug: str) -> str:
+    """One-line author bio from the IE profile API; empty when none is set."""
+    text = fetch(session, f"{BYLINE_PROFILE_API}/{slug}", TRANSLATE_PARAMS)
+    if not text:
+        return ""
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return ""
+    try:
+        bio = clean(str(data["list"][0]["items"][0]["user_description"]))
+    except (KeyError, IndexError, TypeError):
+        return ""
+    if len(bio) > AUTHOR_BIO_LEN:
+        bio = bio[:AUTHOR_BIO_LEN].rsplit(" ", 1)[0] + "…"
+    return bio
+
+
+def attach_authors(session: requests.Session, items: list[dict]) -> None:
+    """Fill each item's author names (term order kept) and lead-author bio."""
+    terms = fetch_author_terms(
+        session, sorted({i for it in items for i in it.get("author_ids") or []})
+    )
+    bios: dict[str, str] = {}
+    for it in items:
+        names: list[str] = []
+        lead_slug = ""
+        for uid in it.get("author_ids") or []:
+            term = terms.get(uid) or {}
+            name = str(term.get("name", "")).strip()
+            if not name:
+                continue
+            names.append(name)
+            if not lead_slug:
+                lead_slug = str(term.get("slug", "")).strip()
+        it["author"] = ", ".join(names)
+        if not lead_slug:
+            continue
+        # One bio line per item: the lead author's.
+        if lead_slug not in bios:
+            bios[lead_slug] = fetch_author_bio(session, lead_slug)
+        it["author_bio"] = bios[lead_slug]
 
 
 # --- article body -------------------------------------------------------------
@@ -242,6 +324,8 @@ def render_body(it: dict, hero: str, blocks: list[tuple[str, str]]) -> tuple[str
     parts: list[str] = []
     if it["author"]:
         parts.append(f"<p><strong>{escape(it['author'])}</strong></p>")
+    if it.get("author_bio"):
+        parts.append(f"<p><em>{escape(it['author_bio'])}</em></p>")
     if hero:
         parts.append(f'<figure><img src="{escape(hero)}" alt="" /></figure>')
     text_bits: list[str] = []
@@ -366,11 +450,15 @@ def run_feed(session: requests.Session, key: str, now: dt.datetime) -> int:
     items = parse_api_items(raw_items)
     print(f"  REST: {len(items)} items")
     new = full = 0
+    pending: list[dict] = []
     for it in items:
         if it["link"] in merged:
             break
-        if new >= MAX_FETCH:
+        if len(pending) >= MAX_FETCH:
             break
+        pending.append(it)
+    attach_authors(session, pending)
+    for it in pending:
         hero = ""
         blocks = parse_content_blocks(it["content"])
         body, summary = render_body(it, hero, blocks)

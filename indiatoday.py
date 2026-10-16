@@ -14,6 +14,7 @@ the complete article ships in the page anyway — inside the Next.js state blob
   description       the full body as HTML (<p>/<img>/<h2> …), no ads/widgets
   description_short a plain-text standfirst (used as the RSS <description>)
   author[].title    byline(s)
+  author[]          also, when set, a one-line author description/role
   datetime_published"YYYY-MM-DD HH:MM:SS" in IST
   image_main        the lead image (tosshub CDN; images hotlink fine)
   magazine_detail   {issue_date: "YYYY-MM-DD", …} — the cover date
@@ -223,6 +224,28 @@ def authors(pd: dict) -> str:
     return ", ".join(out)
 
 
+# A "description" that is just the group name in a div is CMS leftover, not a
+# bio (seen on one author); short role lines are kept.
+AUTHOR_BIO_JUNK = {"india today"}
+AUTHOR_BIO_MIN = 8
+AUTHOR_BIO_LEN = 300
+
+
+def author_bio(pd: dict) -> str:
+    """First substantial author description from the page data; "" if none."""
+    for a in pd.get("author") or []:
+        if not isinstance(a, dict):
+            continue
+        for key in ("short_description", "description"):
+            text = clean(a.get(key) or "")
+            if len(text) < AUTHOR_BIO_MIN or text.lower() in AUTHOR_BIO_JUNK:
+                continue
+            if len(text) > AUTHOR_BIO_LEN:
+                text = text[:AUTHOR_BIO_LEN].rsplit(" ", 1)[0] + "…"
+            return text
+    return ""
+
+
 def pub_date(pd: dict, fallback: dt.datetime) -> dt.datetime:
     raw = (pd.get("datetime_published") or pd.get("datetime_updated") or "").strip()
     if raw:
@@ -251,6 +274,7 @@ def build_article(session: requests.Session, url: str, now: dt.datetime) -> dict
     blocks = parse_blocks(body_html)
     hero = html.unescape((pd.get("image_main") or "").strip())
     author = authors(pd)
+    bio = author_bio(pd)
     when = pub_date(pd, now)
     issue = issue_date(pd)
     summary = clean(pd.get("description_short") or "")
@@ -265,6 +289,8 @@ def build_article(session: requests.Session, url: str, now: dt.datetime) -> dict
     parts: list[str] = []
     if author:
         parts.append(f"<p><strong>{escape(author)}</strong></p>")
+        if bio:
+            parts.append(f"<p><em>{escape(bio)}</em></p>")
     first_img = next((h for k, h in blocks if k == "img"), None)
     if hero and hero != first_img:
         parts.append(f'<figure><img src="{escape(hero)}" alt="" /></figure>')

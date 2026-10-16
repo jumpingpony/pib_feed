@@ -18,8 +18,11 @@ Feeds (matching the sections subscribed in Inoreader):
 Each feed backfills the last TP_DAYS (default 21) and merges the published
 copy so history survives beyond the window. Bodies keep paragraphs, headings,
 quotes, lists, links and responsive images; "Also Read:" / "Read More:"
-related-link blocks and auto-generated disclaimers are dropped. Output:
-public/<key>/feed.xml + index.html.
+related-link blocks and auto-generated disclaimers are dropped. The item's
+byline is the post's primary author — the REST `coauthors` field lists internal
+contributors the site never shows — with the name and, when the public profile
+carries one, a one-line bio opening the body. Output: public/<key>/feed.xml +
+index.html.
 """
 from __future__ import annotations
 
@@ -36,6 +39,7 @@ import requests
 
 BASE = "https://theprint.in"
 REST = BASE + "/wp-json/wp/v2/posts"
+USERS_API = BASE + "/wp-json/wp/v2/users/{uid}"
 
 UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -49,6 +53,10 @@ TIMEOUT = int(os.environ.get("TP_TIMEOUT", "30"))
 RETRIES = int(os.environ.get("TP_RETRIES", "2"))
 MAX_ITEMS = int(os.environ.get("TP_MAX_ITEMS", "300"))
 PER_PAGE = 100
+# Pause before each author-profile lookup; lookups are memoized for the run.
+USER_DELAY = float(os.environ.get("TP_USER_DELAY", "0.5"))
+# One-line author bio cap (site bios can run several sentences).
+AUTHOR_BIO_LEN = 300
 OUT_DIR = os.environ.get("TP_OUT_DIR", "public")
 PUBLISHED_BASE_URL = os.environ.get("TP_PUBLISHED_BASE_URL", "").strip().rstrip("/")
 
@@ -98,7 +106,7 @@ def make_session() -> requests.Session:
     return s
 
 
-def fetch_json(session: requests.Session, url: str, params: dict) -> list | None:
+def fetch_json(session: requests.Session, url: str, params: dict) -> list | dict | None:
     last = None
     for _ in range(RETRIES + 1):
         try:
@@ -204,6 +212,32 @@ def sanitize_body(raw: str) -> str:
     return s.strip()
 
 
+# --- bylines ------------------------------------------------------------------
+def fetch_user(session: requests.Session, uid: int) -> dict:
+    data = fetch_json(
+        session, USERS_API.format(uid=uid), {"_fields": "id,name,slug,description"}
+    )
+    return data if isinstance(data, dict) else {}
+
+
+def resolve_author(
+    session: requests.Session, post: dict, cache: dict[int, dict]
+) -> tuple[str, str]:
+    """Primary author name and their bio line (the only byline the site shows)."""
+    uid = post.get("author")
+    if not isinstance(uid, int) or not uid:
+        return "", ""
+    if uid not in cache:
+        time.sleep(USER_DELAY)
+        cache[uid] = fetch_user(session, uid)
+    user = cache[uid]
+    name = str(user.get("name", "")).strip()
+    bio = strip_tags(str(user.get("description", "")))
+    if len(bio) > AUTHOR_BIO_LEN:
+        bio = bio[:AUTHOR_BIO_LEN].rsplit(" ", 1)[0] + "…"
+    return name, bio
+
+
 # --- feed I/O -----------------------------------------------------------------
 ITEM_RE = re.compile(r"<item>.*?</item>", re.S)
 GUID_ID_RE = re.compile(r"/(\d+)/?\s*$")
@@ -244,7 +278,7 @@ def load_published(session: requests.Session, key: str) -> dict[int, str]:
     return items
 
 
-def render_item(post: dict) -> str:
+def render_item(post: dict, author: str = "", bio: str = "") -> str:
     title = strip_tags(post["title"]["rendered"])
     link = post["link"]
     date = dt.datetime.fromisoformat(post["date"]).replace(tzinfo=IST)
@@ -252,11 +286,18 @@ def render_item(post: dict) -> str:
     summary = strip_tags(body)
     if len(summary) > 500:
         summary = summary[:500].rsplit(" ", 1)[0] + "…"
+    if author:
+        header = f"<p><strong>{escape(author)}</strong></p>"
+        if bio:
+            header += f"\n<p><em>{escape(bio)}</em></p>"
+        body = f"{header}\n{body}"
+    creator = f"      <dc:creator>{escape(author)}</dc:creator>\n" if author else ""
     return (
         "    <item>\n"
         f"      <title>{escape(title)}</title>\n"
         f"      <link>{escape(link)}</link>\n"
         f'      <guid isPermaLink="true">{escape(link)}</guid>\n'
+        f"{creator}"
         f"      <pubDate>{format_datetime(date)}</pubDate>\n"
         f"      <description>{escape(summary)}</description>\n"
         f"      <content:encoded><![CDATA[{body}]]></content:encoded>\n"
@@ -279,6 +320,7 @@ def build_feed(feed: dict, items: dict[int, str]) -> str:
     return (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         '<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/" '
+        'xmlns:dc="http://purl.org/dc/elements/1.1/" '
         'xmlns:atom="http://www.w3.org/2005/Atom">\n'
         "  <channel>\n"
         f"    <title>{escape(feed['title'])}</title>\n"
@@ -321,7 +363,7 @@ def collect_posts(session: requests.Session, feed: dict, after: str) -> list[dic
                 "per_page": PER_PAGE,
                 "page": page,
                 "after": after,
-                "_fields": "id,date,link,title,content",
+                "_fields": "id,date,link,title,content,author",
             },
         )
         if not batch:
@@ -333,7 +375,7 @@ def collect_posts(session: requests.Session, feed: dict, after: str) -> list[dic
     return posts
 
 
-def run_feed(session: requests.Session, feed: dict) -> int:
+def run_feed(session: requests.Session, feed: dict, users: dict[int, dict]) -> int:
     print(f"[{feed['key']}]")
     existing = load_published(session, feed["key"])
     after = (dt.datetime.now(IST) - dt.timedelta(days=DAYS)).strftime("%Y-%m-%dT%H:%M:%S")
@@ -343,7 +385,8 @@ def run_feed(session: requests.Session, feed: dict) -> int:
     for post in posts:
         if post["id"] in existing:
             continue
-        existing[post["id"]] = render_item(post).strip()
+        author, bio = resolve_author(session, post, users)
+        existing[post["id"]] = render_item(post, author, bio).strip()
         found += 1
     xml = build_feed(feed, existing)
     kept = min(len(existing), MAX_ITEMS)
@@ -355,8 +398,9 @@ def run_feed(session: requests.Session, feed: dict) -> int:
 def main() -> int:
     session = make_session()
     counts = {}
+    users: dict[int, dict] = {}
     for feed in FEEDS:
-        counts[feed["key"]] = run_feed(session, feed)
+        counts[feed["key"]] = run_feed(session, feed, users)
     print("Done:", counts)
     return 0
 

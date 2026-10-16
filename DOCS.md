@@ -577,6 +577,9 @@ Next.js state blob `<script id="__NEXT_DATA__">`, at
   `articleBody` is one newline-less blob — `page_data.description` is the only
   source that keeps paragraphs.) Images sit on the tosshub CDN and hotlink fine,
   so nothing is archived.
+- Each new item's body opens with the byline; a one-line bio follows when the
+  author's `short_description`/`description` carries one (bare group-name
+  leftovers are dropped).
 
 Issues are discovered from the year archive `/magazine/<year>`, which lists every
 issue as `/magazine/DD-MM-YYYY`; each such page links that issue's stories. After
@@ -640,9 +643,11 @@ IST pubDates. Title / lead image / summary come from the article's `og:` tags,
 the byline from the `person-name` author links, and the body is reconstructed
 from the container's `<p>`/`<h2-4>`/`<blockquote>`/`<img>` blocks (images are
 lazy-loaded on the `fl-i.thgim.com` CDN via `data-original`, and hotlink fine, so
-nothing is archived). An inline comment-loader `<script>` inside the body div is
-stripped first so its template-literal markup does not leak into the text. Only
-articles not already in the published feed are fetched, so steady state is light.
+nothing is archived). For single-author articles the byline also gets a one-line
+bio (or role label) from the author's profile page, at the top of the body.
+An inline comment-loader `<script>` inside the body div is stripped first so its
+template-literal markup does not leak into the text. Only articles not already
+in the published feed are fetched, so steady state is light.
 
 ## Configuration (env vars)
 
@@ -653,6 +658,7 @@ articles not already in the published feed are fetched, so steady state is light
 | `FL_MAG_DROP_SECTIONS` | – | First-path sections to drop from the magazine feed (e.g. `photo-essay`); blog is never filtered |
 | `FL_MAX_FETCH` | `120` | Cap on new articles fetched per feed per run |
 | `FL_MAX_ITEMS` | `400` | Max items retained per feed |
+| `FL_AUTHOR_BIO_MAX` | `30` | Author-profile pages fetched per run for byline bios (memoized per slug) |
 
 ## Caveats
 
@@ -889,19 +895,23 @@ are metadata only — title, link and date with an empty `<content:encoded>`.
 
 The article pages are served in full; the "premium" wall is a client-side
 Evolok JavaScript overlay (the Bypass-Paywalls rule simply blocks that script).
-A server-side fetch never runs the JS, so the complete article is already in the
-HTML inside `<div id="pcl-full-content">`. The body is rebuilt from that
-container's block elements (paragraphs, sub-headings, inline images), skipping
-ad / Taboola / "also read" widgets; a JSON-LD `articleBody` is used only to
-sanity-check coverage. Images are on IE's own CDN and hotlink fine. Only
-articles not already published are fetched (capped by `IE_MAX_FETCH`), and each
-feed merges its previously published copy.
+The listing and the complete article bodies come from the site's public
+WordPress REST API (`/wp-json/wp/v2/article`, fetched through Google's
+translation relay because the origin's CloudFront rejects GitHub runners): each
+post carries the full `content.rendered`. The body is rebuilt from its block
+elements (paragraphs, sub-headings, inline images), skipping ads and "also read"
+widgets. Each new item's body opens with its byline — the listing's
+`ie_byline_authors` terms resolved to names — and, when the author profile
+carries one, a one-line bio from the IE profile API
+(`/wp-json/wp/v3/profilebyslug/<slug>`). Images are on IE's own CDN and hotlink
+fine. Only articles not already published are taken (capped by `IE_MAX_FETCH`),
+and each feed merges its previously published copy.
 
 ## Configuration (env vars)
 
 | Var | Default | Meaning |
 |-----|---------|---------|
-| `IE_MAX_FETCH` | `60` | Max new article pages fetched per feed per run |
+| `IE_MAX_FETCH` | `60` | Max new articles taken per feed per run |
 | `IE_PUBLISHED_BASE_URL` | – | Live-site base for history-merge |
 | `IE_OUT_DIR` | `public` | Output directory |
 
@@ -909,8 +919,9 @@ The feed list is the `FEEDS` table in `indianexpress.py`.
 
 ## Caveats
 
-- Depends on the `pcl-full-content` container and the Evolok-overlay bypass; a
-  redesign may need selector updates.
+- Depends on the WordPress REST endpoints (listing, byline terms, author
+  profile) staying public through the translation relay; a change there may need
+  selector updates.
 - Unofficial and unaffiliated; content © The Indian Express.
 
 ---
@@ -1076,6 +1087,9 @@ issues.`) and occasionally answer with an anti-robot page.
 - Bodies keep paragraphs, headings, quotes, lists, links and responsive
   images; `Also Read:` / `Read More:` related-link blocks and auto-generated
   disclaimers are dropped. `Edited by ...` credits are attribution and stay.
+- Each new item's body opens with the byline — the post's primary author, since
+  the REST `coauthors` field lists internal contributors the site never prints —
+  with the bio line from the author's public profile when one is set.
 
 ## Configuration (env vars)
 
@@ -1085,6 +1099,7 @@ issues.`) and occasionally answer with an anti-robot page.
 | `TP_MAX_ITEMS` | `300` | Item cap per feed |
 | `TP_TIMEOUT` | `30` | HTTP timeout in seconds |
 | `TP_RETRIES` | `2` | HTTP retry attempts |
+| `TP_USER_DELAY` | `0.5` | Pause before each author-profile lookup (memoized per run) |
 | `TP_PUBLISHED_BASE_URL` | – | Live-site base for history-merge |
 | `TP_OUT_DIR` | `public` | Output directory |
 

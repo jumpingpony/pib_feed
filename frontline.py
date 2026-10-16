@@ -19,11 +19,13 @@ inside `<div id="content-body-<ID>" class="articlebodycontent" itemprop=
 "articleBody">`. So there is no bypass to perform — a plain GET gets full text.
 
 Discovery uses the official feeders (item URLs, ids, categories, pubDates); only
-articles not already in the published feed are fetched. Images live on the
-fl-i.thgim.com CDN (lazy-loaded via `data-original`) and hotlink fine, so no
-archive mode is needed. Output: public/<key>/{feed.xml,index.html}, merged with
-the previously published copy (FL_PUBLISHED_BASE_URL) so each feed grows past the
-feeder window and survives a transient failure.
+articles not already in the published feed are fetched. The byline comes from
+the `person-name` author links, and a one-line bio or role label from the
+author's profile page (only when the article has a single author). Images live
+on the fl-i.thgim.com CDN (lazy-loaded via `data-original`) and hotlink fine, so
+no archive mode is needed. Output: public/<key>/{feed.xml,index.html}, merged
+with the previously published copy (FL_PUBLISHED_BASE_URL) so each feed grows
+past the feeder window and survives a transient failure.
 """
 from __future__ import annotations
 
@@ -162,6 +164,18 @@ UPD_RE = re.compile(r'"dateModified"\s*content="([^"]*)"', re.I)
 AUTHOR_RE = re.compile(
     r'<a[^>]*/profile/author/[^>]*class="person-name[^"]*"[^>]*>(.*?)</a>', re.I | re.S
 )
+# Author profiles: /profile/author/<slug>/ carries a one-line bio (meta
+# description) or at least a role label. Lookups are memoized and capped per
+# run; past the cap articles keep the name-only byline.
+PROFILE_URL = BASE + "/profile/author/{slug}/"
+AUTHOR_PROFILE_RE = re.compile(
+    r'<a[^>]*href="[^"]*?/profile/author/([^/"?]+)/?"[^>]*class="person-name', re.I
+)
+PROFILE_META_RE = re.compile(r'<meta name="description" content="([^"]*)"', re.I)
+DESIGNATION_RE = re.compile(r'<span class="author-designation">(.*?)</span>', re.I | re.S)
+AUTHOR_BIO_MAX = int(os.environ.get("FL_AUTHOR_BIO_MAX", "30"))
+_PROFILE_LINES: dict[str, str] = {}
+_PROFILE_LOOKUPS = [0]
 
 BLOCK_RE = re.compile(
     r"<p\b[^>]*>.*?</p>|<h[234]\b[^>]*>.*?</h[234]>|"
@@ -223,6 +237,34 @@ def authors(page: str) -> str:
     return ", ".join(out)
 
 
+def author_slugs(page: str) -> list[str]:
+    out: list[str] = []
+    for slug in AUTHOR_PROFILE_RE.findall(page or ""):
+        if slug not in out:
+            out.append(slug)
+    return out
+
+
+def profile_line(session: requests.Session, slug: str) -> str:
+    """One-line bio (or role label) from an author profile page; "" if none."""
+    if slug in _PROFILE_LINES:
+        return _PROFILE_LINES[slug]
+    if _PROFILE_LOOKUPS[0] >= AUTHOR_BIO_MAX:
+        return ""
+    _PROFILE_LOOKUPS[0] += 1
+    page = fetch(session, PROFILE_URL.format(slug=slug))
+    line = ""
+    if page:
+        m = PROFILE_META_RE.search(page)
+        line = clean(m.group(1)) if m else ""
+        # Short meta text is site boilerplate; the role label is the fallback.
+        if len(line) < 15:
+            d = DESIGNATION_RE.search(page)
+            line = clean(d.group(1)) if d else ""
+    _PROFILE_LINES[slug] = line[:200]
+    return _PROFILE_LINES[slug]
+
+
 def pub_date(page: str, fallback: dt.datetime) -> dt.datetime:
     for rx in (PUB_RE, UPD_RE):
         m = rx.search(page or "")
@@ -257,6 +299,9 @@ def build_article(session: requests.Session, url: str, fallback: dt.datetime) ->
     blocks = parse_blocks(STRIP_INLINE_RE.sub("", mb.group(1)))
     hero = _meta(OG_IMAGE_RE, page)
     author = authors(page)
+    # A bio belongs to one author; multi-author bylines stay name-only.
+    slugs = author_slugs(page)
+    bio = profile_line(session, slugs[0]) if author and len(slugs) == 1 else ""
     when = pub_date(page, fallback)
     summary = clean(_meta(OG_DESC_RE, page))
     if not summary:
@@ -265,6 +310,8 @@ def build_article(session: requests.Session, url: str, fallback: dt.datetime) ->
     parts: list[str] = []
     if author:
         parts.append(f"<p><strong>{escape(author)}</strong></p>")
+        if bio:
+            parts.append(f"<p><em>{escape(bio)}</em></p>")
     first_img = next((h for k, h in blocks if k == "img"), None)
     if hero and hero != first_img:
         parts.append(f'<figure><img src="{escape(hero)}" alt="" /></figure>')
