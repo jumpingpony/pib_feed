@@ -1,0 +1,46 @@
+name: Build Slow Feeds
+
+# Low-frequency, expensive sources: MP-IDSA, IPCS, India's World, MyGov, Made
+# Easy/NextIAS, PRS, India Today (weekly tier), and NITI, Vision IAS, EAC-PM
+# (monthly tier). The main workflow skips them on its four-hourly schedule and
+# carries their published copies forward; this workflow dispatches the main
+# build with the tier enabled so there is still one artifact and one deploy.
+# Runs on the Monday schedule and on manual dispatch; a push already builds
+# every tier in build-feeds.yml.
+
+on:
+  schedule:
+    - cron: "17 3 * * 1"   # Mondays 03:17 UTC
+  workflow_dispatch:
+    inputs:
+      tier:
+        description: "Tier to build (auto = monthly in the first week, else weekly)"
+        type: choice
+        options: ["auto", "weekly", "monthly"]
+        default: "auto"
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch the main build with the slow tier
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          TIER: ${{ inputs.tier }}
+        run: |
+          tier="${TIER:-auto}"
+          if [ "$tier" = "auto" ]; then
+            # Monthly publications refresh in the first weekly run of the month.
+            if [ "$(date -u +%d)" -le 7 ]; then
+              tier=monthly
+            else
+              tier=weekly
+            fi
+          fi
+          echo "dispatching build-feeds.yml slow=$tier"
+          gh workflow run build-feeds.yml --repo "$REPO" --ref main -f slow="$tier"

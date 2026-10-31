@@ -1,0 +1,413 @@
+name: Build RSS Feeds
+
+on:
+  schedule:
+    - cron: "17 */4 * * *"
+  workflow_dispatch:
+    inputs:
+      ft_repair:
+        description: "FT: re-render this many newest items (0 = off)"
+        type: string
+        default: "0"
+      niti_rebuild:
+        description: "NITI: re-render every in-range item (1 = rebuild, 0 = off)"
+        type: string
+        default: "0"
+      vis_rebuild:
+        description: "Vision IAS: re-render every listed document (1 = rebuild, 0 = off)"
+        type: string
+        default: "0"
+      pubdate_stagger:
+        description: "NITI/Vision IAS: re-date stale items for Inoreader import (1 = on; the carry steps run first)"
+        type: string
+        default: "0"
+      slow:
+        description: "Low-frequency tier (0 = skip, weekly, monthly)"
+        type: choice
+        options: ["0", "weekly", "monthly"]
+        default: "0"
+  push:
+    branches: [main]
+    paths:
+      - "feeds/**"
+      - "tools/**"
+      - "tests/**"
+      - "requirements.txt"
+      - ".github/workflows/build-feeds.yml"
+      - ".github/workflows/build-slow-feeds.yml"
+
+permissions:
+  contents: write   # tools/archive_pdfs.py uploads PDFs as release assets
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    outputs:
+      pages_artifact_id: ${{ steps.pages_artifact.outputs.artifact_id }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Run test suite
+        run: python -m unittest discover -s tests -q
+
+      - name: Configure Pages
+        id: pages
+        uses: actions/configure-pages@v6
+
+      # Each build step is isolated: continue-on-error keeps one source's failure
+      # from aborting the rest (e.g. PIB's TLS cert lapsing). The real outcome is
+      # captured per-step id and re-checked by the final gate so the run still
+      # goes red — and notifies — when any feed fails.
+      - name: Build PIB feed
+        id: pib
+        continue-on-error: true
+        env:
+          PIB_WORKERS: "4"
+          # Merge with the already-published feeds so history is retained beyond
+          # the scan window. Each feed reads <base>/<key>/feed.xml.
+          PIB_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+        run: python feeds/pib_feed.py
+
+      - name: Build News On AIR feeds
+        id: newsonair
+        continue-on-error: true
+        env:
+          NOA_WORKERS: "1"
+          # Same history-retention trick: read each already-published feed from
+          # <base>/<key>/feed.xml and merge, so feeds grow past the source window.
+          NOA_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+        run: python feeds/newsonair_feed.py
+
+      - name: Build Vision IAS PT/Mains 365 feeds
+        if: github.event_name == 'push' || github.event.inputs.slow == 'monthly'
+        id: visioniaspt365
+        continue-on-error: true
+        env:
+          VIS_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+          # Items link Vision's CloudFront PDF directly (no release mirroring);
+          # the one-off rebuild re-renders items stored with release links.
+          VIS_ARCHIVE_MODE: link
+          VIS_REBUILD: ${{ github.event.inputs.vis_rebuild || '0' }}
+        run: python feeds/visioniaspt365.py
+
+      - name: Build Made Easy + NextIAS current-affairs feeds
+        if: github.event_name == 'push' || github.event.inputs.slow == 'weekly' || github.event.inputs.slow == 'monthly'
+        id: meca
+        continue-on-error: true
+        env:
+          MECA_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+          MECA_ARCHIVE_MODE: archive
+          MECA_ARCHIVE_BASE_URL: "https://github.com/${{ github.repository }}/releases/download/{feed}-{year}"
+        run: python feeds/meca.py
+
+      - name: Build MyGov PDF feeds
+        if: github.event_name == 'push' || github.event.inputs.slow == 'weekly' || github.event.inputs.slow == 'monthly'
+        id: mygov
+        continue-on-error: true
+        env:
+          MYGOV_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+          MYGOV_ARCHIVE_MODE: link
+        run: python feeds/mygov.py
+
+      - name: Build Supreme Court Observer feeds
+        id: scobserver
+        continue-on-error: true
+        env:
+          SCO_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+        run: python feeds/scobserver.py
+
+      # The journal and reports feeds moved to *-full keys so readers re-import
+      # the repaired bodies; the old paths keep serving the same feed.
+      - name: Copy legacy Supreme Court Observer feed paths
+        if: always()
+        run: |
+          set -eu
+          for pair in journal reports; do
+            src="public/scobserver-$pair-full"
+            dst="public/scobserver-$pair"
+            if [ -s "$src/feed.xml" ] && grep -q '<item>' "$src/feed.xml"; then
+              mkdir -p "$dst"
+              cp "$src/feed.xml" "$dst/feed.xml"
+              cp "$src/index.html" "$dst/index.html"
+            else
+              echo "no $src/feed.xml; leaving $dst untouched"
+            fi
+          done
+
+      - name: Build PRS Legislative Research feeds
+        if: github.event_name == 'push' || github.event.inputs.slow == 'weekly' || github.event.inputs.slow == 'monthly'
+        id: prsindia
+        continue-on-error: true
+        env:
+          PRS_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+        run: python feeds/prsindia.py
+
+      - name: Build MP-IDSA feeds
+        if: github.event_name == 'push' || github.event.inputs.slow == 'weekly' || github.event.inputs.slow == 'monthly'
+        id: idsa
+        continue-on-error: true
+        env:
+          IDSA_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+        run: python feeds/idsa.py
+
+      - name: Build EAC-PM feeds
+        if: github.event_name == 'push' || github.event.inputs.slow == 'monthly'
+        id: eacpm
+        continue-on-error: true
+        env:
+          EACPM_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+        run: python feeds/eacpm.py
+
+      - name: Build The Indian Express feeds
+        id: indianexpress
+        continue-on-error: true
+        env:
+          IE_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+        run: python feeds/indianexpress.py
+
+      - name: Build India Today magazine feed
+        if: github.event_name == 'push' || github.event.inputs.slow == 'weekly' || github.event.inputs.slow == 'monthly'
+        id: indiatoday
+        continue-on-error: true
+        env:
+          IT_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+        run: python feeds/indiatoday.py
+
+      - name: Build NITI Aayog publication feeds
+        if: github.event_name == 'push' || github.event.inputs.slow == 'monthly'
+        id: niti
+        continue-on-error: true
+        env:
+          NITI_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+          # Items link niti.gov.in PDFs directly (no release mirroring); the
+          # one-off rebuild re-renders items stored with release links.
+          NITI_ARCHIVE_MODE: link
+          NITI_REBUILD: ${{ github.event.inputs.niti_rebuild || '0' }}
+        run: python feeds/niti.py
+
+      - name: Build IPCS feeds
+        if: github.event_name == 'push' || github.event.inputs.slow == 'weekly' || github.event.inputs.slow == 'monthly'
+        id: ipcs
+        continue-on-error: true
+        env:
+          IPCS_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+        run: python feeds/ipcs.py
+
+      - name: Build India's World feed
+        if: github.event_name == 'push' || github.event.inputs.slow == 'weekly' || github.event.inputs.slow == 'monthly'
+        id: indiasworld
+        continue-on-error: true
+        env:
+          INDIASWORLD_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+        run: python feeds/indiasworld.py
+
+      - name: Build Frontline magazine and Digital Exclusives feeds
+        id: frontline
+        continue-on-error: true
+        env:
+          FL_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+        run: python feeds/frontline.py
+
+      - name: Build Times of India Swaminomics feed
+        id: toi
+        continue-on-error: true
+        env:
+          TOI_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+        run: python feeds/toi.py
+
+      - name: Build ThePrint feeds
+        id: theprint
+        continue-on-error: true
+        env:
+          # Merge with the already-published feeds so history is retained
+          # beyond the REST window.
+          TP_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+        run: python feeds/theprint.py
+
+      - name: Build FT Opinion feed
+        id: ft
+        continue-on-error: true
+        env:
+          FT_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+          # One-off re-render of the newest items (ft_repair dispatch input);
+          # 0 for scheduled and push runs.
+          FT_REPAIR_NEWEST: ${{ github.event.inputs.ft_repair || '0' }}
+        run: python feeds/ft.py
+
+      - name: Build The Economist feeds
+        id: economist
+        continue-on-error: true
+        env:
+          ECON_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+          ECON_INTERVAL: "5"
+        run: python feeds/economist.py
+
+      # Runs immediately before the mirror step: the signed epaper PDF urls it
+      # mints live ~5 minutes and must still be valid when tools/archive_pdfs.py runs.
+      - name: Build Indian Express epaper feeds (UPSC Essentials, Delhi)
+        id: ie_epaper
+        continue-on-error: true
+        env:
+          GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          IE_EPAPER_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+          # Epaper PDFs live behind signed, expiring URLs, so mirror them to the
+          # release and point items at the durable asset.
+          IE_EPAPER_ARCHIVE_MODE: archive
+          IE_EPAPER_ARCHIVE_BASE_URL: "https://github.com/${{ github.repository }}/releases/download/{feed}-{year}"
+        run: python feeds/ie_epaper.py
+
+      - name: Mirror PDFs to the archive release
+        id: archive_pdfs
+        continue-on-error: true
+        env:
+          GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+        run: python tools/archive_pdfs.py
+
+      - name: Verify archived release assets
+        id: verify_archives
+        continue-on-error: true
+        env:
+          GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          # 0 = audit every published item, not just recent ones, so an asset
+          # deleted or pruned while feeds still reference it fails the run.
+          ARCHIVE_VERIFY_DAYS: "0"
+          # Accepted gaps: MyGov 2024 items kept local only (no release).
+          ARCHIVE_VERIFY_ALLOWLIST: ".github/known-missing-assets.json"
+        run: python tools/archive_pdfs.py --verify
+
+      # 2026-10-13 renamed these paths from hyphens to underscores; keep serving
+      # the old paths so readers still polling them (or importing the old OPML)
+      # recover instead of hitting 404s.
+      - name: Copy legacy NITI/Vision feed paths
+        id: legacy_paths
+        if: github.event_name == 'push' || github.event.inputs.slow == 'monthly'
+        run: |
+          set -eu
+          while IFS=: read -r old new; do
+            mkdir -p "public/$old"
+            cp "public/$new/feed.xml" "public/$old/feed.xml"
+            cp "public/$new/index.html" "public/$old/index.html"
+          done <<'EOF'
+          niti-reports:niti_reports
+          niti-working-papers:niti_working-papers
+          niti-research-papers:niti_research-papers
+          niti-policy-papers:niti_policy-papers
+          niti-annual-reports:niti_annual-reports
+          visionias-pt-365:visionias_pt-365
+          visionias-mains-365:visionias_mains-365
+          EOF
+
+      - name: Carry forward skipped weekly feeds
+        id: carry_weekly
+        if: github.event_name != 'push' && github.event.inputs.slow != 'weekly' && github.event.inputs.slow != 'monthly'
+        env:
+          PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+          CARRY_KEYS: "idsa-backgrounders,idsa-comments,idsa-issue-briefs,idsa-monographs,ipcs-commentaries,indiasworld,mygov_bharatmatters,mygov_mannkibaat,mygov_pulsenewsletter,madeeasy-weekly,nextias-magazine,prs-acts,prs-bills,prs-budgets,indiatoday_magazine"
+        run: python tools/carry_forward.py
+
+      - name: Carry forward skipped monthly feeds
+        id: carry_monthly
+        if: github.event_name != 'push' && github.event.inputs.slow != 'monthly'
+        env:
+          PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+          CARRY_KEYS: "niti-annual-reports,niti-policy-papers,niti-reports,niti-research-papers,niti-working-papers,niti_annual-reports,niti_policy-papers,niti_reports,niti_research-papers,niti_working-papers,visionias-pt-365,visionias-mains-365,visionias_pt-365,visionias_mains-365,eacpm-reports"
+        run: python tools/carry_forward.py
+
+      # One-off import fix (dispatch input pubdate_stagger=1): Inoreader drops
+      # items older than ~2 weeks when a feed is (re)subscribed, so pull the
+      # stale NITI/Vision items into the last 12 days before deploying. Later
+      # builds keep the re-dated blocks via the published-base merge. Runs after
+      # the carry steps so a bare dispatch (without slow=monthly) has the
+      # published NITI/Vision feeds to rewrite.
+      - name: Stagger old item dates for Inoreader import
+        id: pubdate_stagger
+        if: ${{ github.event.inputs.pubdate_stagger == '1' }}
+        run: python tools/stagger_pubdates.py
+
+      # Publish whatever built (this runs before the gate so a failed feed never
+      # blocks deploying the healthy ones), then fail the run if any step failed.
+      - name: Upload Pages artifact
+        id: pages_artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: public
+
+      - name: Fail the run if any tracked step failed
+        if: always()
+        run: |
+          declare -A outcomes=(
+            [PIB]="${{ steps.pib.outcome }}"
+            [NewsOnAIR]="${{ steps.newsonair.outcome }}"
+            [VisionIAS]="${{ steps.visioniaspt365.outcome }}"
+            [MadeEasy+NextIAS]="${{ steps.meca.outcome }}"
+            [MyGov]="${{ steps.mygov.outcome }}"
+            [SupremeCourtObserver]="${{ steps.scobserver.outcome }}"
+            [PRSIndia]="${{ steps.prsindia.outcome }}"
+            [MP-IDSA]="${{ steps.idsa.outcome }}"
+            [EAC-PM]="${{ steps.eacpm.outcome }}"
+            [IndianExpress]="${{ steps.indianexpress.outcome }}"
+            [IE-epaper]="${{ steps.ie_epaper.outcome }}"
+            [IndiaToday]="${{ steps.indiatoday.outcome }}"
+            [NITI]="${{ steps.niti.outcome }}"
+            [IPCS]="${{ steps.ipcs.outcome }}"
+            [IndiasWorld]="${{ steps.indiasworld.outcome }}"
+            [Frontline]="${{ steps.frontline.outcome }}"
+            [TimesOfIndia]="${{ steps.toi.outcome }}"
+            [ThePrint]="${{ steps.theprint.outcome }}"
+            [FT]="${{ steps.ft.outcome }}"
+            [Economist]="${{ steps.economist.outcome }}"
+            [ArchivePDFs]="${{ steps.archive_pdfs.outcome }}"
+            [VerifyArchives]="${{ steps.verify_archives.outcome }}"
+            [LegacyPaths]="${{ steps.legacy_paths.outcome }}"
+            [CarryWeekly]="${{ steps.carry_weekly.outcome }}"
+            [CarryMonthly]="${{ steps.carry_monthly.outcome }}"
+            [StaggerPubdates]="${{ steps.pubdate_stagger.outcome }}"
+          )
+          failed=0
+          for name in "${!outcomes[@]}"; do
+            if [ "${outcomes[$name]}" = "failure" ]; then
+              echo "::error title=Feed build failed::$name"
+              failed=1
+            else
+              echo "ok: $name (${outcomes[$name]})"
+            fi
+          done
+          if [ "$failed" = 1 ]; then
+            echo "One or more feeds failed — healthy feeds were still deployed."
+            exit 1
+          fi
+          echo "All tracked steps succeeded."
+
+  deploy:
+    needs: build
+    # Publish healthy output after the final gate reports a source failure, but
+    # never create a deployment when the build was cancelled or uploaded nothing.
+    if: >-
+      ${{
+        always() &&
+        needs.build.result != 'cancelled' &&
+        needs.build.outputs.pages_artifact_id != ''
+      }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v5
