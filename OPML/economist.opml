@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <head>
+    <title>The Economist feeds (unofficial, full-text)</title>
+  </head>
+  <body>
+      <outline text="The Economist (unofficial, full-text)" title="The Economist (unofficial, full-text)">
+        <outline type="rss" text="All articles - The Economist" title="All articles - The Economist" xmlUrl="https://jumpingpony.github.io/pib_feed/ecnmst-all/feed.xml" htmlUrl="https://www.economist.com/"/>
+        <outline type="rss" text="Leaders - The Economist" title="Leaders - The Economist" xmlUrl="https://jumpingpony.github.io/pib_feed/ecnmst-leaders/feed.xml" htmlUrl="https://www.economist.com/leaders"/>
+        <outline type="rss" text="Business - The Economist" title="Business - The Economist" xmlUrl="https://jumpingpony.github.io/pib_feed/ecnmst-business/feed.xml" htmlUrl="https://www.economist.com/business"/>
+        <outline type="rss" text="Finance &amp; economics - The Economist" title="Finance &amp; economics - The Economist" xmlUrl="https://jumpingpony.github.io/pib_feed/ecnmst-finance-and-economics/feed.xml" htmlUrl="https://www.economist.com/finance-and-economics"/>
+        <outline type="rss" text="By Invitation - The Economist" title="By Invitation - The Economist" xmlUrl="https://jumpingpony.github.io/pib_feed/ecnmst-by-invitation/feed.xml" htmlUrl="https://www.economist.com/by-invitation"/>
+        <outline type="rss" text="Economic &amp; financial indicators - The Economist" title="Economic &amp; financial indicators - The Economist" xmlUrl="https://jumpingpony.github.io/pib_feed/ecnmst-indicators/feed.xml" htmlUrl="https://www.economist.com/economic-and-financial-indicators"/>
+        <outline type="rss" text="Podcasts - The Economist" title="Podcasts - The Economist" xmlUrl="https://jumpingpony.github.io/pib_feed/ecnmst-podcasts/feed.xml" htmlUrl="https://www.economist.com/podcasts"/>
+        <outline type="rss" text="The World in Brief - The Economist" title="The World in Brief - The Economist" xmlUrl="https://jumpingpony.github.io/pib_feed/ecnmst-world-in-brief/feed.xml" htmlUrl="https://www.economist.com/the-world-in-brief"/>
+      </outline>
+  </body>
+</opml>

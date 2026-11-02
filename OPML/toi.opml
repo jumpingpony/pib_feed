@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <head>
+    <title>The Times of India feeds (unofficial, full-text)</title>
+  </head>
+  <body>
+      <outline text="The Times of India (unofficial, full-text)" title="The Times of India (unofficial, full-text)">
+        <outline type="rss" text="Swaminomics - Swaminathan S Anklesaria Aiyar" title="Swaminomics - Swaminathan S Anklesaria Aiyar" xmlUrl="https://jumpingpony.github.io/pib_feed/toi-swami-nomics/feed.xml" htmlUrl="https://timesofindia.indiatimes.com/toi-plus/author-swaminathansanklesariaaiyar-18032"/>
+      </outline>
+  </body>
+</opml>
