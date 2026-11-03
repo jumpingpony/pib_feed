@@ -872,7 +872,11 @@ def run(session: creq.Session) -> int:
     print(f"[{FEED_KEY}]")
     existing, known = load_state(session)
     rows = discover(session)
-    candidates = dict(rows)  # TEMP backfill: re-render every discovered item
+    candidates = {}
+    for uid, row in rows.items():
+        if uid in existing or uid in known:
+            continue
+        candidates[uid] = row
     print(f"  {len(candidates)} new candidates to scrape")
     found = 0
     if candidates:
