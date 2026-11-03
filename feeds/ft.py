@@ -26,12 +26,13 @@ Payload mapping, verified across every discovery surface:
     standfirst   JSON `standfirst`, used as the description and as the
                  opening italic paragraph
     byline       `byline.tree` author nodes, joined with " and "
-    body         `body.structured.tree` blocks + `references` figures;
+    body         `body.structured.tree` blocks + `references` figures, led by
+                 the `mainImage` hero when the body does not carry it;
                  emphasis/strong/links/lists/headings/blockquotes kept,
                  newsletter/podcast promo boxes and embeds dropped
     scope        everything the opinion surfaces carry is kept, whatever its
-                 topic labels; Banx cartoons still swap in their lead figure
-                 (their body is only a link)
+                 topic labels; Banx cartoons lead with the cartoon (their body
+                 is only a link)
 
 Output: public/ftopeds/feed.xml + index.html, merged with the published copy.
 """
@@ -374,21 +375,44 @@ def hi_res(url: str) -> str:
     return url
 
 
+def render_figure(url: str, alt: str, caption: str) -> str:
+    """Responsive hotlinked figure; empty when there is no image URL."""
+    url = hi_res(url)
+    if not url:
+        return ""
+    out = (
+        f'<figure><img src="{esc(url)}" alt="{esc(alt)}" '
+        'style="max-width:100%;height:auto;" />'
+    )
+    if caption:
+        out += f"<figcaption>{esc(caption)}</figcaption>"
+    return out + "</figure>"
+
+
 def figure_html(ref) -> str:
     """Responsive figure from a main-image/image-set reference."""
     picture = (ref or {}).get("picture") or {}
     image = picture.get("fallbackImage") or ((picture.get("images") or [{}])[0])
-    url = hi_res(image.get("url", ""))
-    if not url:
-        return ""
-    out = (
-        f'<figure><img src="{esc(url)}" alt="{esc(picture.get("alt", ""))}" '
-        'style="max-width:100%;height:auto;" />'
-    )
     caption = " ".join(x for x in (picture.get("caption"), picture.get("credit")) if x)
-    if caption:
-        out += f"<figcaption>{esc(caption)}</figcaption>"
-    return out + "</figure>"
+    return render_figure(image.get("url", ""), picture.get("alt", ""), caption)
+
+
+def lead_figure(content: dict, refs) -> str:
+    """The topper hero, which the body omits on Big Reads and some columns."""
+    topper = content.get("topper") or {}
+    image = content.get("mainImage") or topper.get("fallbackImage") or {}
+    if not image.get("url"):
+        image = ((topper.get("images") or [{}])[0]) or {}
+    if not image.get("url"):
+        return ""
+    shown = set()
+    for ref in refs:
+        fallback = (ref.get("picture") or {}).get("fallbackImage") or {}
+        shown.update(x for x in (fallback.get("id"), fallback.get("url")) if x)
+    if image.get("id") in shown or image.get("url") in shown:
+        return ""
+    caption = " ".join(x for x in (image.get("caption"), image.get("credit")) if x)
+    return render_figure(image.get("url", ""), image.get("altText", ""), caption)
 
 
 def table_cell(cell, refs, page_url: str = "") -> str:
@@ -558,14 +582,13 @@ def render_article(content: dict) -> dict:
     if byline:
         head += f'<p class="byline">{esc(byline)}</p>'
     page_url = content.get("url") or f"https://www.ft.com/content/{content.get('id', '')}"
+    body = blocks_html((struct.get("tree") or {}).get("children"), refs, page_url)
     return {
         "title": title,
         "date": date,
         "standfirst": standfirst,
         "byline": byline,
-        "body_html": head + blocks_html(
-            (struct.get("tree") or {}).get("children"), refs, page_url
-        ),
+        "body_html": head + lead_figure(content, refs) + body,
     }
 
 
