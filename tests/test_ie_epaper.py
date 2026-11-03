@@ -2,8 +2,10 @@
 """Indian Express epaper: release links, partitioned tags, rolling window."""
 import datetime as dt
 import os
+import re
 import sys
 import unittest
+from email.utils import format_datetime
 from unittest.mock import patch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -64,6 +66,37 @@ class TestRollingWindow(unittest.TestCase):
             (today - dt.timedelta(days=10)).isoformat(),
         )
         self.assertEqual(ie_epaper.min_date_for({"min_date": "2025-05-01"}), "2025-05-01")
+
+
+class TestOrdering(unittest.TestCase):
+    def test_a_higher_id_with_an_earlier_stamp_keeps_chronology(self):
+        # What broke the 2026-11-03 build: a new issue (4217181, 03:51) arrived
+        # while the issue already stored below it (4217073) still carried an
+        # earlier stamp of 03:59, so descending-id order inverted the pair.
+        stamped_later = {
+            "id": 4217073,
+            "date": dt.datetime(2026, 11, 3, 3, 59, tzinfo=IST),
+            "title": "Delhi — November 3, 2026",
+            "reader": "https://epaper.indianexpress.com/r/4217073",
+            "archival_name": "indianexpress-delhi_2026-11-03.pdf",
+        }
+        higher_id = {
+            **stamped_later,
+            "id": 4217181,
+            "date": dt.datetime(2026, 11, 3, 3, 51, tzinfo=IST),
+            "reader": "https://epaper.indianexpress.com/r/4217181",
+        }
+        items = {
+            4217181: ie_epaper.render_item(delhi_feed(), higher_id),
+            4217073: ie_epaper.render_item(delhi_feed(), stamped_later),
+        }
+        with patch.object(ie_epaper, "ARCHIVE_MODE", "link"):
+            xml = ie_epaper.build_feed(delhi_feed(), items)
+
+        self.assertEqual(
+            re.findall(r"<pubDate>([^<]+)</pubDate>", xml),
+            [format_datetime(stamped_later["date"]), format_datetime(higher_id["date"])],
+        )
 
 
 if __name__ == "__main__":

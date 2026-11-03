@@ -45,7 +45,7 @@ import os
 import re
 import subprocess
 import sys
-from email.utils import format_datetime
+from email.utils import format_datetime, parsedate_to_datetime
 from xml.sax.saxutils import escape
 
 import requests
@@ -271,6 +271,7 @@ def item_pdf_url(feed: dict, art: dict) -> str | None:
 # --- feed I/O -----------------------------------------------------------------
 ITEM_RE = re.compile(r"<item>.*?</item>", re.S)
 GUID_TAG_RE = re.compile(r"<guid[^>]*>([^<]+)</guid>")
+PUBDATE_TAG_RE = re.compile(r"<pubDate>([^<]+)</pubDate>")
 
 
 def _guid_id(block: str) -> int | None:
@@ -279,6 +280,35 @@ def _guid_id(block: str) -> int | None:
         return None
     m = re.search(r"ie-epaper:(\d+)", g.group(1))
     return int(m.group(1)) if m else None
+
+
+def _item_date(block: str) -> dt.datetime:
+    """pubDate already rendered into one stored block; epoch when unreadable."""
+    m = PUBDATE_TAG_RE.search(block)
+    when = None
+    if m:
+        try:
+            when = parsedate_to_datetime(m.group(1))
+        except (TypeError, ValueError):
+            when = None
+    if when is None:
+        return dt.datetime.min.replace(tzinfo=dt.timezone.utc)
+    return when if when.tzinfo else when.replace(tzinfo=dt.timezone.utc)
+
+
+def newest_first(items_by_id: dict[int, str]) -> list[str]:
+    """Stored blocks newest first by their own pubDate, ids breaking ties.
+
+    Issue ids only roughly track publication time: the source re-stamps an
+    existing issue, and it files a late edition under a higher id with an
+    earlier timestamp. Ordering by id therefore breaks the feed's chronology.
+    """
+    rows = sorted(
+        ((_item_date(block), issue_id, block) for issue_id, block in items_by_id.items()),
+        key=lambda row: (row[0], row[1]),
+        reverse=True,
+    )
+    return [block for _, _, block in rows]
 
 
 def load_published(session: requests.Session, key: str) -> dict[int, str]:
@@ -335,7 +365,7 @@ def render_item(feed: dict, art: dict) -> str:
 
 
 def build_feed(feed: dict, items_by_id: dict[int, str]) -> str:
-    ordered = [items_by_id[i] for i in sorted(items_by_id, reverse=True)][: feed["max_items"]]
+    ordered = newest_first(items_by_id)[: feed["max_items"]]
     now = format_datetime(dt.datetime.now(IST))
     self_url = f"{PUBLISHED_BASE_URL}/{feed['key']}/feed.xml" if PUBLISHED_BASE_URL else ""
     atom = (
