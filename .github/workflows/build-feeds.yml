@@ -52,168 +52,176 @@ jobs:
         id: pages
         uses: actions/configure-pages@v6
 
-      # Each build step is isolated: continue-on-error keeps one source's failure
-      # from aborting the rest (e.g. PIB's TLS cert lapsing). The real outcome is
-      # captured per-step id and re-checked by the final gate so the run still
-      # goes red — and notifies — when any feed fails.
-      - name: Build PIB feed
-        id: pib
-        continue-on-error: true
-        env:
-          PIB_WORKERS: "4"
-          # Merge with the already-published feeds so history is retained beyond
-          # the scan window. Each feed reads <base>/<key>/feed.xml.
-          PIB_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
-        run: python feeds/pib_feed.py
+      # Builders are independent: different hosts, disjoint output trees. GitHub
+      # runs up to ten background steps at once (rest queue in declaration
+      # order), so wall time is the slowest source, not the sum. Longest and
+      # timeout-prone sources are declared first. Each builder keeps its own
+      # pacing; the pool does not widen a source's concurrency (SCO stays at
+      # 3 workers and 1 request/second).
+      #
+      # continue-on-error keeps one source's failure (e.g. PIB's TLS cert
+      # lapsing) from aborting the rest. The per-step outcome is re-checked by
+      # the final gate so the run still goes red and notifies.
+      - parallel:
+          - name: Build Supreme Court Observer feeds
+            if: github.event_name == 'push' || github.event.inputs.slow == 'weekly' || github.event.inputs.slow == 'monthly'
+            id: scobserver
+            continue-on-error: true
+            env:
+              SCO_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+            run: python feeds/scobserver.py
 
-      - name: Build News On AIR feeds
-        id: newsonair
-        continue-on-error: true
-        env:
-          NOA_WORKERS: "1"
-          # Same history-retention trick: read each already-published feed from
-          # <base>/<key>/feed.xml and merge, so feeds grow past the source window.
-          NOA_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
-        run: python feeds/newsonair_feed.py
+          - name: Build IPCS feeds
+            if: github.event_name == 'push' || github.event.inputs.slow == 'weekly' || github.event.inputs.slow == 'monthly'
+            id: ipcs
+            continue-on-error: true
+            env:
+              IPCS_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+            run: python feeds/ipcs.py
 
-      - name: Build Vision IAS PT/Mains 365 feeds
-        if: github.event_name == 'push' || github.event.inputs.slow == 'monthly'
-        id: visioniaspt365
-        continue-on-error: true
-        env:
-          VIS_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
-          # Items link Vision's CloudFront PDF directly (no release mirroring).
-          VIS_ARCHIVE_MODE: link
-        run: python feeds/visioniaspt365.py
+          - name: Build India's World feed
+            if: github.event_name == 'push' || github.event.inputs.slow == 'monthly'
+            id: indiasworld
+            continue-on-error: true
+            env:
+              INDIASWORLD_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+            run: python feeds/indiasworld.py
 
-      - name: Build Made Easy + NextIAS current-affairs feeds
-        if: github.event_name == 'push' || github.event.inputs.slow == 'weekly' || github.event.inputs.slow == 'monthly'
-        id: meca
-        continue-on-error: true
-        env:
-          MECA_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
-          MECA_ARCHIVE_MODE: archive
-          MECA_ARCHIVE_BASE_URL: "https://github.com/${{ github.repository }}/releases/download/{feed}-{year}"
-        run: python feeds/meca.py
+          - name: Build News On AIR feeds
+            id: newsonair
+            continue-on-error: true
+            env:
+              NOA_WORKERS: "1"
+              # Read each already-published feed from <base>/<key>/feed.xml and
+              # merge, so feeds grow past the source window.
+              NOA_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+            run: python feeds/newsonair_feed.py
 
-      - name: Build MyGov PDF feeds
-        if: github.event_name == 'push' || github.event.inputs.slow == 'weekly' || github.event.inputs.slow == 'monthly'
-        id: mygov
-        continue-on-error: true
-        env:
-          MYGOV_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
-          MYGOV_ARCHIVE_MODE: link
-        run: python feeds/mygov.py
+          - name: Build PIB feed
+            id: pib
+            continue-on-error: true
+            env:
+              PIB_WORKERS: "4"
+              # Merge with the already-published feeds so history is retained
+              # beyond the scan window. Each feed reads <base>/<key>/feed.xml.
+              PIB_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+            run: python feeds/pib_feed.py
 
-      - name: Build Supreme Court Observer feeds
-        id: scobserver
-        continue-on-error: true
-        env:
-          SCO_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
-        run: python feeds/scobserver.py
+          - name: Build The Economist feeds
+            id: economist
+            continue-on-error: true
+            env:
+              ECON_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+              ECON_INTERVAL: "5"
+            run: python feeds/economist.py
 
-      - name: Build PRS Legislative Research feeds
-        if: github.event_name == 'push' || github.event.inputs.slow == 'weekly' || github.event.inputs.slow == 'monthly'
-        id: prsindia
-        continue-on-error: true
-        env:
-          PRS_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
-        run: python feeds/prsindia.py
+          - name: Build FT Opinion feed
+            id: ft
+            continue-on-error: true
+            env:
+              FT_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+            run: python feeds/ft.py
 
-      - name: Build MP-IDSA feeds
-        if: github.event_name == 'push' || github.event.inputs.slow == 'weekly' || github.event.inputs.slow == 'monthly'
-        id: idsa
-        continue-on-error: true
-        env:
-          IDSA_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
-        run: python feeds/idsa.py
+          - name: Build MP-IDSA feeds
+            if: github.event_name == 'push' || github.event.inputs.slow == 'weekly' || github.event.inputs.slow == 'monthly'
+            id: idsa
+            continue-on-error: true
+            env:
+              IDSA_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+            run: python feeds/idsa.py
 
-      - name: Build EAC-PM feeds
-        if: github.event_name == 'push' || github.event.inputs.slow == 'monthly'
-        id: eacpm
-        continue-on-error: true
-        env:
-          EACPM_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
-        run: python feeds/eacpm.py
+          - name: Build MyGov PDF feeds
+            if: github.event_name == 'push' || github.event.inputs.slow == 'weekly' || github.event.inputs.slow == 'monthly'
+            id: mygov
+            continue-on-error: true
+            env:
+              MYGOV_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+              MYGOV_ARCHIVE_MODE: link
+            run: python feeds/mygov.py
 
-      - name: Build The Indian Express feeds
-        id: indianexpress
-        continue-on-error: true
-        env:
-          IE_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
-        run: python feeds/indianexpress.py
+          - name: Build The Indian Express feeds
+            id: indianexpress
+            continue-on-error: true
+            env:
+              IE_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+            run: python feeds/indianexpress.py
 
-      - name: Build India Today magazine feed
-        if: github.event_name == 'push' || github.event.inputs.slow == 'weekly' || github.event.inputs.slow == 'monthly'
-        id: indiatoday
-        continue-on-error: true
-        env:
-          IT_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
-        run: python feeds/indiatoday.py
+          - name: Build ThePrint feeds
+            id: theprint
+            continue-on-error: true
+            env:
+              # Merge with the already-published feeds so history is retained
+              # beyond the REST window.
+              TP_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+            run: python feeds/theprint.py
 
-      - name: Build NITI Aayog publication feeds
-        if: github.event_name == 'push' || github.event.inputs.slow == 'monthly'
-        id: niti
-        continue-on-error: true
-        env:
-          NITI_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
-          # Items link niti.gov.in PDFs directly (no release mirroring).
-          NITI_ARCHIVE_MODE: link
-        run: python feeds/niti.py
+          - name: Build Made Easy + NextIAS current-affairs feeds
+            if: github.event_name == 'push' || github.event.inputs.slow == 'weekly' || github.event.inputs.slow == 'monthly'
+            id: meca
+            continue-on-error: true
+            env:
+              MECA_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+              MECA_ARCHIVE_MODE: archive
+              MECA_ARCHIVE_BASE_URL: "https://github.com/${{ github.repository }}/releases/download/{feed}-{year}"
+            run: python feeds/meca.py
 
-      - name: Build IPCS feeds
-        if: github.event_name == 'push' || github.event.inputs.slow == 'weekly' || github.event.inputs.slow == 'monthly'
-        id: ipcs
-        continue-on-error: true
-        env:
-          IPCS_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
-        run: python feeds/ipcs.py
+          - name: Build PRS Legislative Research feeds
+            if: github.event_name == 'push' || github.event.inputs.slow == 'weekly' || github.event.inputs.slow == 'monthly'
+            id: prsindia
+            continue-on-error: true
+            env:
+              PRS_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+            run: python feeds/prsindia.py
 
-      - name: Build India's World feed
-        if: github.event_name == 'push' || github.event.inputs.slow == 'monthly'
-        id: indiasworld
-        continue-on-error: true
-        env:
-          INDIASWORLD_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
-        run: python feeds/indiasworld.py
+          - name: Build EAC-PM feeds
+            if: github.event_name == 'push' || github.event.inputs.slow == 'monthly'
+            id: eacpm
+            continue-on-error: true
+            env:
+              EACPM_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+            run: python feeds/eacpm.py
 
-      - name: Build Frontline magazine and Digital Exclusives feeds
-        id: frontline
-        continue-on-error: true
-        env:
-          FL_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
-        run: python feeds/frontline.py
+          - name: Build India Today magazine feed
+            if: github.event_name == 'push' || github.event.inputs.slow == 'weekly' || github.event.inputs.slow == 'monthly'
+            id: indiatoday
+            continue-on-error: true
+            env:
+              IT_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+            run: python feeds/indiatoday.py
 
-      - name: Build Times of India Swaminomics feed
-        id: toi
-        continue-on-error: true
-        env:
-          TOI_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
-        run: python feeds/toi.py
+          - name: Build NITI Aayog publication feeds
+            if: github.event_name == 'push' || github.event.inputs.slow == 'monthly'
+            id: niti
+            continue-on-error: true
+            env:
+              NITI_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+              # Items link niti.gov.in PDFs directly (no release mirroring).
+              NITI_ARCHIVE_MODE: link
+            run: python feeds/niti.py
 
-      - name: Build ThePrint feeds
-        id: theprint
-        continue-on-error: true
-        env:
-          # Merge with the already-published feeds so history is retained
-          # beyond the REST window.
-          TP_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
-        run: python feeds/theprint.py
+          - name: Build Vision IAS PT/Mains 365 feeds
+            if: github.event_name == 'push' || github.event.inputs.slow == 'monthly'
+            id: visioniaspt365
+            continue-on-error: true
+            env:
+              VIS_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+              # Items link Vision's CloudFront PDF directly (no release mirroring).
+              VIS_ARCHIVE_MODE: link
+            run: python feeds/visioniaspt365.py
 
-      - name: Build FT Opinion feed
-        id: ft
-        continue-on-error: true
-        env:
-          FT_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
-        run: python feeds/ft.py
+          - name: Build Frontline magazine and Digital Exclusives feeds
+            id: frontline
+            continue-on-error: true
+            env:
+              FL_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+            run: python feeds/frontline.py
 
-      - name: Build The Economist feeds
-        id: economist
-        continue-on-error: true
-        env:
-          ECON_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
-          ECON_INTERVAL: "5"
-        run: python feeds/economist.py
+          - name: Build Times of India Swaminomics feed
+            id: toi
+            continue-on-error: true
+            env:
+              TOI_PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
+            run: python feeds/toi.py
 
       # Runs immediately before the mirror step: the signed epaper PDF urls it
       # mints live ~5 minutes and must still be valid when tools/archive_pdfs.py runs.
@@ -253,7 +261,7 @@ jobs:
         if: github.event_name != 'push' && github.event.inputs.slow != 'weekly' && github.event.inputs.slow != 'monthly'
         env:
           PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
-          CARRY_KEYS: "idsa-backgrounders,idsa-comments,idsa-issue-briefs,idsa-monographs,ipcs-commentaries,mygov_bharatmatters,mygov_mannkibaat,mygov_pulsenewsletter,madeeasy-weekly,nextias-magazine,prs-acts,prs-bills,prs-budgets,indiatoday_magazine"
+          CARRY_KEYS: "idsa-backgrounders,idsa-comments,idsa-issue-briefs,idsa-monographs,ipcs-commentaries,scobserver_cases,scobserver-journal-full,scobserver-reports-full,mygov_bharatmatters,mygov_mannkibaat,mygov_pulsenewsletter,madeeasy-weekly,nextias-magazine,prs-acts,prs-bills,prs-budgets,indiatoday_magazine"
         run: python tools/carry_forward.py
 
       - name: Carry forward skipped monthly feeds
