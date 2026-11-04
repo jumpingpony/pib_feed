@@ -142,7 +142,6 @@ class TestArticleRecord(unittest.TestCase):
         self.assertTrue(record["permalink"])
         self.assertEqual(record["text"], "Body ■")
         self.assertEqual(record["tags"], ["AI"])
-        self.assertEqual(record["audio"], "")
 
     def test_missing_body_is_empty(self):
         record = ec.article_record(article_teaser())
@@ -152,7 +151,9 @@ class TestArticleRecord(unittest.TestCase):
     def test_narration_audio_not_exposed(self):
         full = article_full()
         full["narration"] = {"url": "https://example.test/a.mp3"}
-        self.assertEqual(ec.article_record(article_teaser(), full)["audio"], "")
+        record = ec.article_record(article_teaser(), full)
+        xml = ec.feed_xml([record], "Title", "https://example.test/", "Desc")
+        self.assertIsNone(ET.fromstring(xml).find("./channel/item/enclosure"))
 
 
 class TestSelection(unittest.TestCase):
@@ -255,43 +256,6 @@ class TestIndicators(unittest.TestCase):
         self.assertIn("<img", kept[0]["html"])
 
 
-class TestPodcasts(unittest.TestCase):
-    def show(self):
-        return {"title": "The Intelligence", "slug": "the-intelligence", "imageUrl": ""}
-
-    def episode(self):
-        return {
-            "id": "e1",
-            "title": "Effective non-altruism",
-            "publishedDate": "2026-10-29T08:36:11.000Z",
-            "episodeUrl": "effective-non-altruism",
-            "description": "First line.\nSecond line.",
-            "audio": {"url": "https://example.test/a.mp3", "duration": "23:03"},
-            "imageUrl": "https://example.test/a.jpg",
-        }
-
-    def test_episode_record(self):
-        record = ec.podcast_record(self.show(), self.episode())
-        self.assertEqual(
-            record["url"],
-            "https://www.economist.com/podcasts/2026/10/29/effective-non-altruism",
-        )
-        self.assertEqual(record["audio"], "https://example.test/a.mp3")
-        self.assertEqual(record["duration"], "23:03")
-        self.assertIn("First line.", record["html"])
-        self.assertIn("Second line.", record["html"])
-        self.assertEqual(record["section"], "The Intelligence")
-
-    def test_feed_has_enclosure(self):
-        record = ec.podcast_record(self.show(), self.episode())
-        xml = ec.feed_xml([record], "Podcasts", "https://example.test/", "Desc")
-        item = ET.fromstring(xml).find("./channel/item")
-        enclosure = item.find("enclosure")
-        self.assertIsNotNone(enclosure)
-        self.assertEqual(enclosure.get("url"), "https://example.test/a.mp3")
-        self.assertEqual(enclosure.get("type"), "audio/mpeg")
-
-
 class TestTwib(unittest.TestCase):
     def payload(self):
         return {
@@ -354,6 +318,7 @@ class TestFeedXml(unittest.TestCase):
 class TestFeedKeys(unittest.TestCase):
     def test_published_feed_keys_are_stable(self):
         # These keys are the subscription URLs; a rename re-subscribes readers.
+        # ecnmst-podcasts was retired on 2026-11-04 and stays unpublished.
         self.assertEqual(
             set(ec.FEEDS),
             {
@@ -363,16 +328,9 @@ class TestFeedKeys(unittest.TestCase):
                 "ecnmst-finance-and-economics",
                 "ecnmst-by-invitation",
                 "ecnmst-indicators",
-                "ecnmst-podcasts",
                 "ecnmst-world-in-brief",
             },
         )
-
-    def test_podcasts_have_a_single_feed(self):
-        # A second podcast feed would repeat every episode in the reader.
-        kinds = [feed["kind"] for feed in ec.FEEDS.values()]
-        self.assertEqual(kinds.count("podcasts"), 1)
-        self.assertEqual(kinds.count("twib"), 1)
 
     def test_no_article_feed_targets_podcasts(self):
         for feed in ec.FEEDS.values():

@@ -76,8 +76,6 @@ FEED_CADENCE = {
     "idsa-comments": "MONTHLY",
     "nextias-magazine": "MONTHLY",
     "frontline_magazine": "MONTHLY",
-    # Podcast releases come in seasons: daily inside a run, silent for months.
-    "ecnmst-podcasts": "SEASONAL",
     "scobserver_cases": "SEASONAL",
     "scobserver-journal-full": "MONTHLY",
     "scobserver-reports-full": "SEASONAL",
