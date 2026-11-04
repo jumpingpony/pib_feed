@@ -170,7 +170,7 @@ jobs:
         run: python feeds/ipcs.py
 
       - name: Build India's World feed
-        if: github.event_name == 'push' || github.event.inputs.slow == 'weekly' || github.event.inputs.slow == 'monthly'
+        if: github.event_name == 'push' || github.event.inputs.slow == 'monthly'
         id: indiasworld
         continue-on-error: true
         env:
@@ -253,7 +253,7 @@ jobs:
         if: github.event_name != 'push' && github.event.inputs.slow != 'weekly' && github.event.inputs.slow != 'monthly'
         env:
           PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
-          CARRY_KEYS: "idsa-backgrounders,idsa-comments,idsa-issue-briefs,idsa-monographs,ipcs-commentaries,indiasworld,mygov_bharatmatters,mygov_mannkibaat,mygov_pulsenewsletter,madeeasy-weekly,nextias-magazine,prs-acts,prs-bills,prs-budgets,indiatoday_magazine"
+          CARRY_KEYS: "idsa-backgrounders,idsa-comments,idsa-issue-briefs,idsa-monographs,ipcs-commentaries,mygov_bharatmatters,mygov_mannkibaat,mygov_pulsenewsletter,madeeasy-weekly,nextias-magazine,prs-acts,prs-bills,prs-budgets,indiatoday_magazine"
         run: python tools/carry_forward.py
 
       - name: Carry forward skipped monthly feeds
@@ -261,7 +261,7 @@ jobs:
         if: github.event_name != 'push' && github.event.inputs.slow != 'monthly'
         env:
           PUBLISHED_BASE_URL: "${{ steps.pages.outputs.base_url }}"
-          CARRY_KEYS: "niti_annual-reports,niti_policy-papers,niti_reports,niti_research-papers,niti_working-papers,visionias_pt-365,visionias_mains-365,eacpm-reports"
+          CARRY_KEYS: "niti_annual-reports,niti_policy-papers,niti_reports,niti_research-papers,niti_working-papers,visionias_pt-365,visionias_mains-365,eacpm-reports,indiasworld"
         run: python tools/carry_forward.py
 
       - name: Audit generated feeds
