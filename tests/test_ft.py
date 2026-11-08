@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""FT Opinion: the topper hero leads the item body exactly once."""
+"""FT Select: scope filtering plus the topper hero leading each item once."""
 import os
 import sys
 import unittest
@@ -94,6 +94,59 @@ class TestLeadImage(unittest.TestCase):
         )
 
         self.assertNotIn("<img", rendered["body_html"])
+
+
+class TestScope(unittest.TestCase):
+    def test_scope_by_desk_and_annotation(self):
+        cases = [
+            ("lex", {"editorialDesk": "/FT/Lex"}, True),
+            ("big read", {"editorialDesk": "/FT/Feats/The Big Read"}, True),
+            ("alphaville", {"editorialDesk": "/FT/Alphaville"}, True),
+            (
+                "ft view",
+                {
+                    "editorialDesk": "/FT/Feats/Opinion",
+                    "annotations": [{"prefLabel": "The FT View"}],
+                },
+                True,
+            ),
+            ("op-ed", {"editorialDesk": "/FT/Feats/Work & Careers"}, True),
+            ("newsletter", {"editorialDesk": "/FT/Newsletters"}, True),
+            (
+                "lunch",
+                {
+                    "editorialDesk": "/FT/Weekend",
+                    "annotations": [{"prefLabel": "Lunch with the FT"}],
+                },
+                True,
+            ),
+            ("weekend", {"editorialDesk": "/FT/Weekend/Food & Drink"}, False),
+            ("letters", {"editorialDesk": "/FT/Feats/Letters"}, False),
+            (
+                "banx",
+                {
+                    "editorialDesk": "/FT/Feats",
+                    "annotations": [{"prefLabel": "Banx"}],
+                },
+                False,
+            ),
+            ("unknown", {}, False),
+        ]
+        for label, content, expected in cases:
+            with self.subTest(section=label):
+                self.assertEqual(ft.in_scope(content), expected)
+
+    def test_rss_rows_carry_their_source(self):
+        body = (
+            "<item><title>Lex.</title>"
+            "<link>https://www.ft.com/content/"
+            "11111111-2222-3333-4444-555555555555</link>"
+            "<pubDate>Wed, 04 Nov 2026 10:00:00 GMT</pubDate></item>"
+        )
+
+        rows = ft.parse_rss(body, "lex")
+
+        self.assertEqual(rows[0]["source"], "lex")
 
 
 if __name__ == "__main__":

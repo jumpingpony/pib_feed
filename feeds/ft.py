@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
-"""Build a full-text RSS 2.0 feed of FT Opinion (ft.com/opinion).
+"""Build a full-text RSS 2.0 feed of FT Select, a curated slice of FT analysis.
 
-Discovery comes from FT's own RSS feeds (opinion, lex, big-read, ft-view,
-banx), which are served from Cloudflare's edge and stay reachable from
+FT Select carries Lex, The Big Read, Alphaville, The FT View, Lunch with the
+FT, the Free Lunch, Unhedged, Inside Politics, Trade Secrets, Tech Tonic and
+Moral Money newsletters, and the general opinion columns. Letters, Banx
+cartoons and the rest of FT Weekend (Life & Arts) are excluded.
+
+Discovery comes from the selected section RSS feeds (lex, big-read, ft-view,
+alphaville, lunch-with-the-ft, the newsletter routes and the opinion
+firehose), which are served from Cloudflare's edge and stay reachable from
 datacenter IPs even when the article HTML does not, the FT app's stream JSON
 (the Opinion firehose and the Undercover Economist column) and the paginated
-/opinion listing as an opportunistic top-up for premium features the feeds
-drop; a challenged listing page just narrows discovery to the feeds and
-streams.
+/opinion listing as an opportunistic top-up; a challenged listing page just
+narrows discovery to the feeds and streams.
 Full stories come from the FT app's content API, an unchallenged JSON route
 that needs no auth, referer or TLS impersonation and serves fresh articles
 from the origin too:
@@ -30,11 +35,12 @@ Payload mapping, verified across every discovery surface:
                  the `mainImage` hero when the body does not carry it;
                  emphasis/strong/links/lists/headings/blockquotes kept,
                  newsletter/podcast promo boxes and embeds dropped
-    scope        everything the opinion surfaces carry is kept, whatever its
-                 topic labels; Banx cartoons lead with the cartoon (their body
-                 is only a link)
+    scope        editorial desk and annotations decide: Letters and Banx are
+                 dropped, and FT Weekend items are dropped unless they are
+                 Lunch with the FT; everything else the selected surfaces
+                 carry is kept
 
-Output: public/ftopeds/feed.xml + index.html, merged with the published copy.
+Output: public/ft-select/feed.xml + index.html, merged with the published copy.
 """
 from __future__ import annotations
 
@@ -58,26 +64,40 @@ BASE = "https://www.ft.com"
 CONTENT = BASE + "/content/{uuid}"
 OPINION = BASE + "/opinion"
 API = "https://app-api.ft.com/__content/v6/article/{uuid}?useVanities=false"
-# RSS paths are never Cloudflare-challenged; /rss/big-read and /rss/ft-view
-# carry the premium series the opinion feed drops out of its window, and both
-# Banx routes serve the same items (/rss/banx is the readable alias). The
-# letters, Alphaville and newsletter feeds are commentary the /opinion
-# listing only shows intermittently.
+# RSS paths are never Cloudflare-challenged. Dedicated section routes come
+# first so a UUID shared with the opinion firehose keeps its section source;
+# /rss/opinion runs last and supplies the general opinion columns.
 RSS_FEEDS = (
-    BASE + "/rss/opinion",
     BASE + "/rss/lex",
     BASE + "/rss/big-read",
     BASE + "/rss/ft-view",
-    BASE + "/rss/letters",
     BASE + "/rss/alphaville",
+    BASE + "/rss/lunch-with-the-ft",
     BASE + "/rss/free-lunch",
     BASE + "/rss/inside-politics",
     BASE + "/rss/unhedged",
     BASE + "/rss/trade-secrets",
     BASE + "/rss/tech-tonic",
     BASE + "/rss/moral-money",
-    BASE + "/rss/banx",
+    BASE + "/rss/opinion",
 )
+
+# Every item on these routes is in scope. The HTML fallback may trust them when
+# the app API misses; opinion-route items must be classified by the API payload
+# first, because that firehose mixes in FT Weekend.
+SECTION_ROUTES = {
+    "lex",
+    "big-read",
+    "ft-view",
+    "alphaville",
+    "lunch-with-the-ft",
+    "free-lunch",
+    "inside-politics",
+    "unhedged",
+    "trade-secrets",
+    "tech-tonic",
+    "moral-money",
+}
 
 # The FT app's streams are unchallenged JSON like the content API and carry 50
 # teasers each: the Opinion firehose (vanity "comment", the same content as
@@ -101,20 +121,27 @@ MAX_ITEMS = int(os.environ.get("FT_MAX_ITEMS", "100"))
 MAX_PAGES = int(os.environ.get("FT_MAX_PAGES", "5"))
 OUT_DIR = os.environ.get("FT_OUT_DIR", "public")
 PUBLISHED_BASE_URL = os.environ.get("FT_PUBLISHED_BASE_URL", "").strip().rstrip("/")
-FEED_KEY = "ftopeds"
+FEED_KEY = "ft-select"
 CACHE_VERSION = 2
 
-FEED_TITLE = "FT - Opinion"
+FEED_TITLE = "FT - Select"
 FEED_DESC = (
-    "Unofficial full-text feed of FT Opinion: every piece the opinion feeds, "
-    "app streams and listings carry, with Lex., The Big Read. and The FT "
-    "View. series prefixes preserved."
+    "Unofficial full-text feed of FT Select: Lex, The Big Read, Alphaville, "
+    "The FT View, Lunch with the FT, the FT newsletters and opinion columns. "
+    "Letters and cartoons excluded."
 )
 
 # Series headings live on the topper (Lex, The FT View) or the desk
 # (The Big Read carries a topic label instead, so the desk is the marker).
 SERIES_LABELS = {"Lex": "Lex.", "The FT View": "The FT View."}
 SERIES_DESKS = {"/FT/Lex": "Lex.", "/FT/Feats/The Big Read": "The Big Read."}
+
+# Scope is decided from the app payload, not the discovery route: the opinion
+# firehose mixes in FT Weekend, and only Lunch with the FT survives from it.
+WEEKEND_DESK = "/FT/Weekend"
+LETTERS_DESK = "/FT/Feats/Letters"
+LUNCH_LABEL = "Lunch with the FT"
+DROP_ANNOTATIONS = {"Banx"}
 
 # Promo boxes and embeds present in the JSON but absent from the old HTML
 # feed: the HTML sanitizer stripped matching <aside>/<iframe> blocks.
@@ -199,7 +226,7 @@ RSS_DATE_RE = re.compile(r"<pubDate>(.*?)</pubDate>", re.S)
 UUID_RE = re.compile(r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})")
 
 
-def parse_rss(body: str, banx: bool) -> list[dict]:
+def parse_rss(body: str, source: str) -> list[dict]:
     rows: list[dict] = []
     for block in RSS_ITEM_RE.findall(body):
         link_m = RSS_LINK_RE.search(block)
@@ -211,7 +238,7 @@ def parse_rss(body: str, banx: bool) -> list[dict]:
             {
                 "uuid": id_m.group(1),
                 "date": date_m.group(1).strip() if date_m else "",
-                "banx": banx,
+                "source": source,
             }
         )
     return rows
@@ -256,7 +283,7 @@ def discover_streams(session: creq.Session) -> list[dict]:
                 {
                     "uuid": uid,
                     "date": t.get("firstPublishedDate") or t.get("publishedDate") or "",
-                    "banx": False,
+                    "source": "stream",
                 }
             )
             new += 1
@@ -317,22 +344,23 @@ def discover(session: creq.Session) -> dict[str, dict]:
     """All current entries keyed by UUID; RSS first, streams and listing top up."""
     rows: dict[str, dict] = {}
     for url in RSS_FEEDS:
+        source = url.rsplit("/", 1)[-1]
         body = fetch(session, url)
         if not body:
             continue
         new = 0
-        for row in parse_rss(body, banx=url.endswith("/rss/banx")):
+        for row in parse_rss(body, source):
             if row["uuid"] in rows:
                 continue
             rows[row["uuid"]] = row
             new += 1
-        print(f"  {url.rsplit('/', 1)[-1]}: {new} new entries")
+        print(f"  {source}: {new} new entries")
         time.sleep(DELAY)
     for row in discover_streams(session):
         rows.setdefault(row["uuid"], row)
     for uid in discover_listing(session):
         if uid not in rows:
-            rows[uid] = {"uuid": uid, "date": "", "banx": False}
+            rows[uid] = {"uuid": uid, "date": "", "source": "listing"}
     return rows
 
 
@@ -592,14 +620,25 @@ def render_article(content: dict) -> dict:
     }
 
 
+def in_scope(content: dict) -> bool:
+    """Whether one API payload belongs in FT Select."""
+    desk = content.get("editorialDesk") or ""
+    labels = {label.get("prefLabel") for label in content.get("annotations") or []}
+    if not desk and not labels:
+        return False
+    if desk == LETTERS_DESK or labels & DROP_ANNOTATIONS:
+        return False
+    if desk.startswith(WEEKEND_DESK) and LUNCH_LABEL not in labels:
+        return False
+    return True
+
+
 # --- html fallback ------------------------------------------------------------
 TAG_RE = re.compile(r"<[^>]+>")
 LD_RE = re.compile(r'<script type="application/ld\+json">(.*?)</script>', re.S)
 H1_RE = re.compile(r'<h1[^>]*class="[^>]*o-topper__headline[^>]*>(.*?)</h1>', re.S)
 BODY_RE = re.compile(r'<article[^>]*id="article-body"[^>]*>(.*?)</article>', re.S)
 TIME_RE = re.compile(r'datetime="([^"]+)"')
-LEAD_FIGURE_RE = re.compile(r'<figure[^>]*class="[^"]*n-content-image[^"]*".*?</figure>', re.S)
-OG_IMAGE_RE = re.compile(r'<meta property="og:image" content="([^"]+)"')
 
 
 def strip_tags(s: str) -> str:
@@ -665,7 +704,7 @@ def sanitize_body(inner: str) -> str:
     return inner.strip()
 
 
-def parse_article_html(page: str, banx: bool = False) -> dict | None:
+def parse_article_html(page: str) -> dict | None:
     """Fallback full-text article from www.ft.com HTML."""
     ld = _parse_ld(page)
     title_m = H1_RE.search(page)
@@ -679,17 +718,6 @@ def parse_article_html(page: str, banx: bool = False) -> dict | None:
             date = None
     body_m = BODY_RE.search(page)
     body = sanitize_body(body_m.group(1)) if body_m else ""
-    if banx and "<img" not in body:
-        # Cartoons are the lead figure; the article body is only a link.
-        lead = LEAD_FIGURE_RE.search(page)
-        body = _figure(lead.group(0)) if lead else ""
-        if not body:
-            og = OG_IMAGE_RE.search(page)
-            if og:
-                body = (
-                    f'<figure><img src="{escape(html.unescape(og.group(1)))}" alt="" '
-                    'style="max-width:100%;height:auto;" /></figure>'
-                )
     if not body or not title:
         return None
     return {
@@ -804,7 +832,7 @@ def build_feed(items: dict[str, str]) -> str:
         'xmlns:atom="http://www.w3.org/2005/Atom">\n'
         "  <channel>\n"
         f"    <title>{escape(FEED_TITLE)}</title>\n"
-        f"    <link>{escape(OPINION)}</link>\n"
+        f"    <link>{escape(BASE)}</link>\n"
         f"    <description>{escape(FEED_DESC)}</description>\n"
         "    <language>en</language>\n"
         f"    <lastBuildDate>{now}</lastBuildDate>\n"
@@ -854,11 +882,15 @@ def item_date(raw: str) -> dt.datetime | None:
 def scrape(session: creq.Session, cand: dict) -> tuple[dict, dict | None]:
     """One article: app API first, www HTML fallback. Fails -> retried next run."""
     content = fetch_api(session, cand["uuid"])
+    if content and not in_scope(content):
+        cand["skip"] = True
+        return cand, None
     art = render_article(content) if content else None
-    if not art:
+    # The HTML fallback cannot classify scope, so only section routes may use it.
+    if not art and cand.get("source") in SECTION_ROUTES:
         page = fetch(session, CONTENT.format(uuid=cand["uuid"]))
         if page:
-            art = parse_article_html(page, banx=cand.get("banx", False))
+            art = parse_article_html(page)
     time.sleep(DELAY)
     if not art:
         return cand, None
@@ -885,6 +917,8 @@ def run(session: creq.Session) -> int:
             for fut in as_completed(futures):
                 cand, art = fut.result()
                 if not art:
+                    if cand.get("skip"):
+                        known.add(cand["uuid"])
                     continue  # transient; retried next run
                 existing[cand["uuid"]] = render_item(art).strip()
                 found += 1

@@ -14,7 +14,7 @@ DOCS.md section listed below.
 | `eacpm.py` | EAC-PM reports | EAC-PM feeds (unofficial) |
 | `economist.py` | The Economist (app gateway) | The Economist feeds (unofficial) |
 | `frontline.py` | Frontline magazine and blog | Frontline feeds (unofficial) |
-| `ft.py` | FT Opinion | FT Opinion feed - full-text (unofficial) |
+| `ft.py` | FT Select | FT Select feed - full-text (unofficial) |
 | `idsa.py` | MP-IDSA publications | MP-IDSA feeds (unofficial) |
 | `ie_epaper.py` | Indian Express epaper and UPSC Essentials | Indian Express epaper feeds (unofficial) |
 | `indianexpress.py` | The Indian Express full text | The Indian Express feeds - full-text (unofficial) |

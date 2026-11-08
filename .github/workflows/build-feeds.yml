@@ -115,7 +115,7 @@ jobs:
               ECON_INTERVAL: "5"
             run: python feeds/economist.py
 
-          - name: Build FT Opinion feed
+          - name: Build FT Select feed
             id: ft
             continue-on-error: true
             env:

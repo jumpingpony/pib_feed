@@ -45,8 +45,8 @@
       <outline text="EAC-PM (Economic Advisory Council to the PM)" title="EAC-PM (Economic Advisory Council to the PM)">
         <outline type="rss" text="Reports - EAC-PM" title="Reports - EAC-PM" xmlUrl="https://jumpingpony.github.io/pib_feed/eacpm-reports/feed.xml" htmlUrl="https://eacpm.gov.in/reports/"/>
       </outline>
-      <outline text="FT Opinion (unofficial, full-text)" title="FT Opinion (unofficial, full-text)">
-        <outline type="rss" text="FT - Opinion" title="FT - Opinion" xmlUrl="https://jumpingpony.github.io/pib_feed/ftopeds/feed.xml" htmlUrl="https://www.ft.com/opinion"/>
+      <outline text="FT Select (unofficial, full-text)" title="FT Select (unofficial, full-text)">
+        <outline type="rss" text="FT - Select" title="FT - Select" xmlUrl="https://jumpingpony.github.io/pib_feed/ft-select/feed.xml" htmlUrl="https://www.ft.com/"/>
       </outline>
       <outline text="The Indian Express (unofficial, full-text)" title="The Indian Express (unofficial, full-text)">
         <outline type="rss" text="Explained - Indian Express" title="Explained - Indian Express" xmlUrl="https://jumpingpony.github.io/pib_feed/indianexpress-explained/feed.xml" htmlUrl="https://indianexpress.com/section/explained/"/>
