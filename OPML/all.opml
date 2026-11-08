@@ -85,7 +85,6 @@
         <outline type="rss" text="PastForward - ThePrint" title="PastForward - ThePrint" xmlUrl="https://jumpingpony.github.io/pib_feed/theprint-past-forward/feed.xml" htmlUrl="https://theprint.in/category/past-forward/"/>
       </outline>
       <outline text="The Economist (unofficial, full-text)" title="The Economist (unofficial, full-text)">
-        <outline type="rss" text="All articles - The Economist" title="All articles - The Economist" xmlUrl="https://jumpingpony.github.io/pib_feed/ecnmst-all/feed.xml" htmlUrl="https://www.economist.com/"/>
         <outline type="rss" text="Leaders - The Economist" title="Leaders - The Economist" xmlUrl="https://jumpingpony.github.io/pib_feed/ecnmst-leaders/feed.xml" htmlUrl="https://www.economist.com/leaders"/>
         <outline type="rss" text="Business - The Economist" title="Business - The Economist" xmlUrl="https://jumpingpony.github.io/pib_feed/ecnmst-business/feed.xml" htmlUrl="https://www.economist.com/business"/>
         <outline type="rss" text="Finance &amp; economics - The Economist" title="Finance &amp; economics - The Economist" xmlUrl="https://jumpingpony.github.io/pib_feed/ecnmst-finance-and-economics/feed.xml" htmlUrl="https://www.economist.com/finance-and-economics"/>

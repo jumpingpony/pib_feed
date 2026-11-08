@@ -318,11 +318,11 @@ class TestFeedXml(unittest.TestCase):
 class TestFeedKeys(unittest.TestCase):
     def test_published_feed_keys_are_stable(self):
         # These keys are the subscription URLs; a rename re-subscribes readers.
-        # ecnmst-podcasts was retired on 2026-11-04 and stays unpublished.
+        # ecnmst-all was retired on 2026-11-08 and ecnmst-podcasts on 2026-11-04;
+        # both stay unpublished.
         self.assertEqual(
             set(ec.FEEDS),
             {
-                "ecnmst-all",
                 "ecnmst-leaders",
                 "ecnmst-business",
                 "ecnmst-finance-and-economics",
