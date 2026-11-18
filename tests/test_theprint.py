@@ -28,6 +28,7 @@ class TestFeedKeys(unittest.TestCase):
                 "theprint-50-word-edit",
                 "theprint-diplomacy",
                 "theprint-past-forward",
+                "theprint-opinion",
             },
         )
 

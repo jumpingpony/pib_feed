@@ -83,6 +83,7 @@
         <outline type="rss" text="50-Word Edit - ThePrint" title="50-Word Edit - ThePrint" xmlUrl="https://jumpingpony.github.io/pib_feed/theprint-50-word-edit/feed.xml" htmlUrl="https://theprint.in/category/50-word-edit/"/>
         <outline type="rss" text="Diplomacy - ThePrint" title="Diplomacy - ThePrint" xmlUrl="https://jumpingpony.github.io/pib_feed/theprint-diplomacy/feed.xml" htmlUrl="https://theprint.in/category/diplomacy/"/>
         <outline type="rss" text="PastForward - ThePrint" title="PastForward - ThePrint" xmlUrl="https://jumpingpony.github.io/pib_feed/theprint-past-forward/feed.xml" htmlUrl="https://theprint.in/category/past-forward/"/>
+        <outline type="rss" text="Opinion - ThePrint" title="Opinion - ThePrint" xmlUrl="https://jumpingpony.github.io/pib_feed/theprint-opinion/feed.xml" htmlUrl="https://theprint.in/category/opinion/"/>
       </outline>
       <outline text="The Economist (unofficial, full-text)" title="The Economist (unofficial, full-text)">
         <outline type="rss" text="Leaders - The Economist" title="Leaders - The Economist" xmlUrl="https://jumpingpony.github.io/pib_feed/ecnmst-leaders/feed.xml" htmlUrl="https://www.economist.com/leaders"/>

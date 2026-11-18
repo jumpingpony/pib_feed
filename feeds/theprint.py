@@ -14,6 +14,7 @@ Feeds (matching the sections subscribed in Inoreader):
     theprint-50-word-edit
     theprint-diplomacy
     theprint-past-forward
+    theprint-opinion
 
 Each feed backfills the last TP_DAYS (default 21) and merges the published
 copy so history survives beyond the window. Bodies keep paragraphs, headings,
@@ -95,6 +96,16 @@ FEEDS = [
         "title": "PastForward - ThePrint",
         "desc": "Unofficial full-text feed of ThePrint PastForward.",
         "section": BASE + "/category/past-forward/",
+    },
+    {
+        # Parent category: WP recurses into children, so this carries the whole
+        # Opinion section - PoV, Economix, Security Code, Tele-scope and the
+        # untagged op-eds alike.
+        "key": "theprint-opinion",
+        "cat": 5799,
+        "title": "Opinion - ThePrint",
+        "desc": "Unofficial full-text feed of ThePrint Opinion.",
+        "section": BASE + "/category/opinion/",
     },
 ]
 
